@@ -1,10 +1,10 @@
-你给的这张图其实是一个 **非常典型的后台管理系统布局**，用 **CSS Grid（网格布局）**实现非常合适，比 `flex` 更清晰。
+一个 **非常典型的后台管理系统布局**，用 **CSS Grid（网格布局）**实现非常合适，比 `flex` 更清晰。
 
-我先 **解析布局结构 → 再讲 Grid 核心属性 → 最后给完整代码**。
+先 **解析布局结构 → 再讲 Grid 核心属性 → 最后给完整代码**。
 
 ---
 
-# 一、先理解你这张布局图
+# 一、先理解这张布局图
 
 ![Image](https://cdn.dribbble.com/userupload/39780468/file/original-bc19305fc6efddd9498c1def67ceaf67.png?resize=1600x1200)
 
@@ -391,28 +391,3 @@ Grid写法：
 "aside tab"
 "aside main"
 ```
-
----
-
-如果你愿意，我可以 **再给你一份更接近企业后台系统的布局方案**：
-
-例如：
-
-🔥 **Vue / React 管理系统常见 Layout 架构**
-
-```
-header
-aside
-tab
-breadcrumb
-main
-footer
-```
-
-并且附：
-
-* 完整 **CSS Grid布局图**
-* **Element / Ant Design 同款布局实现**
-* **企业级 Layout 代码模板**
-
-这套是 **前端面试 + 实战项目最常见的一种后台布局结构**。
