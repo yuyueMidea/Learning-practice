@@ -1,0 +1,143 @@
+// Color variables are injected via vite.config.js additionalData (@use variables.scss)
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --primary: #{$primary};
+  --primary-light: #{$primary-light};
+  --sidebar-width: #{$sidebar-width};
+  --sidebar-collapsed: #{$sidebar-collapsed-width};
+  --header-height: #{$header-height};
+  --bg-page: #{$gray-50};
+  --bg-card: #ffffff;
+  --border-color: #{$gray-200};
+  --text-primary: #{$gray-800};
+  --text-secondary: #{$gray-500};
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+  background-color: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+}
+
+// Scrollbar
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: $gray-300;
+  border-radius: 3px;
+  &:hover { background: $gray-400; }
+}
+
+// NProgress
+#nprogress .bar {
+  background: $primary !important;
+  height: 3px !important;
+}
+
+// Element Plus overrides
+.el-menu {
+  border-right: none !important;
+}
+
+.el-card {
+  border-radius: $radius-md !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: $shadow-sm !important;
+}
+
+.el-button--primary {
+  background-color: $primary !important;
+  border-color: $primary !important;
+  &:hover {
+    background-color: $primary-light !important;
+    border-color: $primary-light !important;
+  }
+}
+
+.el-tag {
+  border-radius: 20px !important;
+}
+
+// Page transitions
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active {
+  transition: all 0.3s ease;
+}
+.slide-enter-from {
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+// Stats card
+.stat-card {
+  background: var(--bg-card);
+  border-radius: $radius-md;
+  padding: 20px 24px;
+  border: 1px solid var(--border-color);
+  box-shadow: $shadow-sm;
+  transition: box-shadow $transition;
+  &:hover { box-shadow: $shadow-md; }
+}
+
+// Table styles
+.erp-table {
+  .el-table__header-wrapper {
+    th {
+      background-color: $gray-50 !important;
+      color: $gray-600 !important;
+      font-weight: 500;
+    }
+  }
+}
+
+// Form card
+.form-card {
+  background: var(--bg-card);
+  border-radius: $radius-md;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+}
+
+// Page header
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  
+  .page-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: $gray-800;
+  }
+  
+  .page-subtitle {
+    font-size: 13px;
+    color: $gray-500;
+    margin-top: 2px;
+  }
+}
