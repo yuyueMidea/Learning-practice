@@ -35,7 +35,7 @@ export default function AppShell({ children }) {
             ))}
           </nav>
         </aside>
-        <main>{children}</main>
+        <main className="main-content">{children}</main>
       </div>
     </>
   );

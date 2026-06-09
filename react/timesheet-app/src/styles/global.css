@@ -62,9 +62,22 @@ body {
 .layout {
   display: grid;
   grid-template-columns: 232px 1fr;
-  min-height: calc(100vh - 64px);
+  height: calc(100vh - 64px);
+  overflow: hidden;
 }
-.side { background: #0b1220; color: #cbd5e1; padding: 18px 14px; }
+.side {
+  background: #0b1220;
+  color: #cbd5e1;
+  padding: 18px 14px;
+  overflow-y: auto;
+}
+ 
+.main-content {
+  padding: 26px 30px 40px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .nav-title {
   font-size: 11px; text-transform: uppercase;
   letter-spacing: 0.08em; color: #94a3b8;
