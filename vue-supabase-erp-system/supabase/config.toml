@@ -1,0 +1,4 @@
+project_id = "erp-phase-2"
+
+[functions.manage-system-users]
+verify_jwt = true

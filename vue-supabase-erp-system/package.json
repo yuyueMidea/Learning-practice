@@ -1,0 +1,31 @@
+{
+  "name": "erp-supabase-vue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "基于 Vue 3、Supabase、Element Plus 的企业 ERP 系统",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .js,.vue"
+  },
+  "engines": {
+    "node": ">=20.19.0 || >=22.12.0"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "@supabase/supabase-js": "^2.57.0",
+    "echarts": "^5.6.0",
+    "element-plus": "^2.11.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.22",
+    "vue-echarts": "^7.0.3",
+    "vue-router": "^4.5.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^8.0.0"
+  }
+}
