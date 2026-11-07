@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-mode="js">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>滚动动画对照实验室 · JS vs CSS animation-timeline</title>
+<style>
+@property --n{syntax:"<integer>";initial-value:0;inherits:false}
+@property --p{syntax:"<integer>";initial-value:0;inherits:false}
+
+:root{
+  --bg:#0b0d14; --bg2:#121623; --bg3:#0a0c12; --fg:#eef0f6; --muted:#8b93a7;
+  --accent:#7c5cff; --accent2:#22d3ee; --accent3:#ff6b9a; --line:rgba(255,255,255,.1);
+  --js:#fbbf24; --css:#34d399;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;line-height:1.7;overflow-x:clip;padding-bottom:90px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(255,255,255,.08);padding:2px 7px;border-radius:6px;font-size:.88em;color:var(--accent2)}
+.tag{display:inline-block;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2);border:1px solid rgba(34,211,238,.4);padding:4px 12px;border-radius:999px;margin-bottom:18px}
+h1,h2{line-height:1.12;letter-spacing:-.02em}
+h2{font-size:clamp(30px,5vw,56px);margin-bottom:14px}
+h3{line-height:1.3}
+.lead{color:var(--muted);max-width:680px;font-size:clamp(15px,1.6vw,18px)}
+.wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+section.block{padding:120px 0 90px;position:relative}
+.sec-head{margin-bottom:50px}
+
+/* ===== 固定 UI：进度条 / 导航 / 切换开关 / HUD ===== */
+#bar{position:fixed;left:0;top:0;height:4px;width:100%;background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3));transform-origin:0 50%;transform:scaleX(0);z-index:100}
+nav{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:99;display:flex;gap:4px;padding:6px;background:rgba(18,22,35,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:999px;max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav a{color:var(--muted);text-decoration:none;font-size:13px;padding:6px 12px;border-radius:999px;white-space:nowrap;transition:.25s}
+nav a:hover{background:var(--accent);color:#fff}
+#dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:120;display:flex;gap:10px;align-items:center;padding:8px;background:rgba(18,22,35,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.18);border-radius:999px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.seg{display:flex;background:rgba(255,255,255,.06);border-radius:999px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font:600 14px inherit;font-family:inherit;padding:8px 22px;border-radius:999px;cursor:pointer;transition:.25s}
+.seg button[data-m=js][aria-pressed=true]{background:var(--js);color:#2a1d00}
+.seg button[data-m=css][aria-pressed=true]{background:var(--css);color:#032a1d}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
+#stress{border:1px solid var(--line);background:transparent;color:var(--muted);font:13px inherit;font-family:inherit;padding:8px 14px;border-radius:999px;cursor:pointer;transition:.25s;white-space:nowrap}
+#stress[aria-pressed=true]{background:#ef4444;border-color:#ef4444;color:#fff}
+#hud{position:fixed;left:14px;bottom:16px;z-index:110;font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--muted);background:rgba(18,22,35,.8);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);padding:8px 12px;border-radius:10px;min-width:170px}
+#hud b{color:var(--accent2);font-weight:600;float:right;margin-left:14px}
+#hud b.js{color:var(--js)}#hud b.css{color:var(--css)}
+#nosup{display:none;position:fixed;z-index:130;left:50%;bottom:76px;transform:translateX(-50%);background:#7f1d1d;border:1px solid #f87171;padding:8px 14px;border-radius:10px;font-size:13px;max-width:92vw;text-align:center}
+@media(max-width:820px){#hud{display:none}}
+@media(max-width:520px){.seg button{padding:8px 16px}#stress{padding:8px 10px;font-size:12px}}
+
+/* ===== HERO ===== */
+.hero{min-height:100vh;display:grid;place-items:center;text-align:center;position:relative;overflow:hidden;padding:120px 24px 80px}
+.hero::before{content:"";position:absolute;inset:-20%;background:radial-gradient(40% 40% at 30% 30%,rgba(124,92,255,.35),transparent 70%),radial-gradient(35% 35% at 75% 65%,rgba(34,211,238,.25),transparent 70%);filter:blur(30px)}
+.hero>div{position:relative;max-width:900px}
+.hero h1{font-size:clamp(38px,7.4vw,96px);background:linear-gradient(120deg,#fff 20%,var(--accent2) 60%,var(--accent3));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{margin:22px auto 0;color:var(--muted);max-width:640px;font-size:clamp(15px,1.8vw,19px)}
+.howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:40px;text-align:left}
+.howto div{background:rgba(18,22,35,.7);border:1px solid var(--line);border-radius:16px;padding:16px 18px;font-size:14px;color:var(--muted)}
+.howto b{display:block;color:var(--fg);margin-bottom:4px}
+.pill{display:inline-block;font-weight:700;font-size:12px;padding:1px 9px;border-radius:999px}
+.pill.js{background:var(--js);color:#2a1d00}.pill.css{background:var(--css);color:#032a1d}
+
+/* ===== 原理总览 ===== */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.route{background:var(--bg2);border:1px solid var(--line);border-radius:22px;padding:28px}
+.route.js{border-top:3px solid var(--js)}.route.css{border-top:3px solid var(--css)}
+.route h3{font-size:22px;margin-bottom:6px}
+.route p,.route li{color:var(--muted);font-size:14.5px}
+.route ul{margin:10px 0 0 18px}
+.pipe{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:16px 0 6px;font-size:12.5px}
+.pipe span{padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+.pipe span.main{border-color:rgba(251,191,36,.55);color:#fde68a}
+.pipe span.comp{border-color:rgba(52,211,153,.55);color:#a7f3d0}
+.pipe i{color:var(--muted);font-style:normal}
+.legend{font-size:12px;color:var(--muted);margin-bottom:12px}
+.legend .main{color:#fde68a}.legend .comp{color:#a7f3d0}
+.concepts{margin-top:34px;border:1px solid var(--line);border-radius:18px;overflow:hidden;font-size:14px}
+.concepts div{display:grid;grid-template-columns:230px 1fr;gap:16px;padding:13px 20px;border-top:1px solid var(--line)}
+.concepts div:first-child{border-top:0;background:var(--bg2);color:var(--muted)}
+.concepts span:first-child{font-family:ui-monospace,Menlo,monospace;color:var(--accent2);font-size:13px}
+.rangeviz{margin-top:34px;background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:26px 28px}
+.rangeviz h4{margin-bottom:16px;font-size:16px}
+.rbar{position:relative;height:84px;margin:30px 0 40px}
+.rbar .seg3{position:absolute;top:30px;height:30px;display:grid;place-items:center;font-size:12px;font-weight:600;color:#06121a}
+.rbar .entry{left:0;width:30%;background:#67e8f9;border-radius:8px 0 0 8px}
+.rbar .contain{left:30%;width:40%;background:#a5b4fc}
+.rbar .exit{left:70%;width:30%;background:#f9a8d4;border-radius:0 8px 8px 0}
+.rbar .brk{position:absolute;top:0;height:22px;border:2px solid var(--muted);border-bottom:0;border-radius:8px 8px 0 0;font-size:12px;color:var(--muted);text-align:center;line-height:20px}
+.rbar .brk.cover{left:0;width:100%;top:-4px}
+.rbar .tick{position:absolute;top:62px;font-size:11.5px;color:var(--muted);transform:translateX(-50%);white-space:nowrap;text-align:center}
+.formula{margin-top:16px;font-family:ui-monospace,Menlo,monospace;font-size:13.5px;color:#d9def0;background:var(--bg3);padding:14px 18px;border-radius:12px;border:1px solid var(--line);overflow-x:auto}
+.mapping{margin-top:34px;border:1px solid var(--line);border-radius:18px;overflow:hidden;font-size:14px}
+.mapping div{display:grid;grid-template-columns:130px 1fr 1fr;gap:14px;padding:12px 20px;border-top:1px solid var(--line)}
+.mapping div:first-child{border-top:0;background:var(--bg2);color:var(--muted)}
+.mapping b{color:var(--fg)}
+@media(max-width:700px){.concepts div{grid-template-columns:1fr;gap:2px}.mapping div{grid-template-columns:90px 1fr}.mapping div>:nth-child(3){grid-column:2;color:var(--muted)}.rbar .tick{font-size:10px}}
+
+/* ===== 说明面板（每个演示之后） ===== */
+.explain{margin-top:50px;background:linear-gradient(180deg,rgba(124,92,255,.08),transparent 60%),var(--bg2);border:1px solid var(--line);border-radius:24px;padding:30px}
+.explain>h3{font-size:20px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.explain>h3::before{content:"";width:6px;height:22px;border-radius:3px;background:linear-gradient(var(--accent),var(--accent2))}
+.explain h4{font-size:15px;margin:22px 0 6px;color:var(--fg)}
+.explain p,.explain li{color:#b6bdd1;font-size:14.5px}
+.explain ul,.explain ol{margin:6px 0 0 20px}
+.explain li{margin:3px 0}
+.code2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+@media(max-width:900px){.code2{grid-template-columns:1fr}}
+.code2 figure{background:var(--bg3);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-width:0;transition:.3s}
+.code2 figcaption{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;font-size:13px;font-weight:600;border-bottom:1px solid var(--line);background:rgba(255,255,255,.03)}
+.code2 figure.js figcaption{color:var(--js)}.code2 figure.css figcaption{color:var(--css)}
+.code2 figcaption::after{content:"";font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px}
+[data-mode=js] .code2 figure.js{border-color:var(--js);box-shadow:0 0 0 1px var(--js),0 0 30px rgba(251,191,36,.12)}
+[data-mode=css] .code2 figure.css{border-color:var(--css);box-shadow:0 0 0 1px var(--css),0 0 30px rgba(52,211,153,.12)}
+[data-mode=js] .code2 figure.js figcaption::after,[data-mode=css] .code2 figure.css figcaption::after{content:"当前运行";background:currentColor}
+[data-mode=js] .code2 figure.js figcaption::after{color:var(--js);background:var(--js);color:#2a1d00}
+[data-mode=css] .code2 figure.css figcaption::after{background:var(--css);color:#032a1d}
+.code2 figure:not(.js):not(.css) figcaption{color:var(--muted)}
+pre{padding:14px 18px;font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:#c5cbe0;overflow-x:auto;tab-size:2}
+pre .c{color:#6b7391}pre .k{color:#ff8fb1}pre .v{color:#7dd3fc}pre .s{color:#a7f3d0}
+.note{margin-top:18px;padding:12px 16px;border-left:3px solid var(--accent3);background:rgba(255,107,154,.07);border-radius:0 10px 10px 0;font-size:14px;color:#d9c2cc}
+.note.ok{border-color:var(--css);background:rgba(52,211,153,.07);color:#bfe9d9}
+.diag{margin:14px 0 0;padding:14px 18px;background:var(--bg3);border:1px solid var(--line);border-radius:12px;font:12.5px/1.6 ui-monospace,Menlo,monospace;color:#c5cbe0;overflow-x:auto;white-space:pre}
+
+/* ===== 1. 触发式 ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:20px;padding:26px}
+.card .ico{font-size:32px;margin-bottom:10px}
+.card h3{margin-bottom:6px;font-size:18px}
+.card p{color:var(--muted);font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px;margin-top:30px}
+.stat{text-align:center;padding:28px 10px;border-radius:20px;background:linear-gradient(160deg,rgba(124,92,255,.18),rgba(34,211,238,.08));border:1px solid var(--line)}
+.stat b{font-size:clamp(34px,5vw,52px);display:block;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:14px}
+.num{--n:var(--to);counter-reset:n var(--n)}
+.num::after{content:counter(n) var(--suf,"")}
+.sweep{font-size:clamp(26px,4.4vw,50px);font-weight:800;line-height:1.25;margin-top:52px;color:transparent;
+  background:linear-gradient(90deg,#fff,#fff) 0 0/0% 100% no-repeat,linear-gradient(rgba(255,255,255,.16),rgba(255,255,255,.16)) 0 0/100% 100% no-repeat;
+  -webkit-background-clip:text;background-clip:text}
+
+/* ===== 2. 滚动联动 ===== */
+.linked{height:400vh;position:relative;background:var(--bg2)}
+.linked .stage{position:sticky;top:0;height:100vh;display:grid;place-items:center;overflow:hidden}
+.orb{width:min(46vmin,420px);aspect-ratio:1;border-radius:50%;background:conic-gradient(from 0deg,var(--accent),var(--accent2),var(--accent3),var(--accent));box-shadow:0 0 120px rgba(124,92,255,.5);display:grid;place-items:center}
+.orb::after{content:"";width:62%;aspect-ratio:1;border-radius:50%;background:var(--bg2)}
+.bigword{position:absolute;top:14vh;left:0;right:0;text-align:center;font-size:clamp(40px,10vw,130px);font-weight:900;letter-spacing:-.03em}
+.meter{position:absolute;left:24px;top:50%;translate:0 -50%;width:6px;height:40vh;background:var(--line);border-radius:6px;overflow:hidden}
+.meter i{display:block;width:100%;height:100%;background:linear-gradient(var(--accent2),var(--accent));transform-origin:50% 0;transform:scaleY(0)}
+svg.path{position:absolute;right:5vw;top:50%;translate:0 -50%;width:min(24vw,240px)}
+svg.path path{fill:none;stroke:var(--accent2);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1}
+@media(max-width:700px){svg.path{display:none}}
+.linked .info{position:absolute;left:0;right:0;bottom:11vh;text-align:center;padding:0 20px}
+.linked .info h3{font-size:clamp(20px,3vw,32px)}
+.readout{display:inline-block;margin-top:10px;font:14px ui-monospace,Menlo,monospace;color:var(--accent2);background:rgba(255,255,255,.08);padding:2px 10px;border-radius:6px;counter-reset:p var(--p)}
+.readout::after{content:"progress = " counter(p) "%"}
+.modebadge{display:inline-block;margin-left:8px;font-size:12px;padding:1px 10px;border-radius:999px;vertical-align:middle;font-weight:700}
+[data-mode=js] .modebadge{background:var(--js);color:#2a1d00}[data-mode=css] .modebadge{background:var(--css);color:#032a1d}
+.modebadge::after{content:"JS 驱动"}[data-mode=css] .modebadge::after{content:"CSS 驱动"}
+
+/* ===== 3. 视差 ===== */
+.para{height:130vh;position:relative;overflow:hidden;background:linear-gradient(#1b1340,#4b2a6e 55%,#e0678a 100%)}
+.para .layer,.para .float{position:absolute}
+.para .layer{left:-5%;width:110%}
+.para .sun{top:22%;left:50%;width:min(24vw,240px);aspect-ratio:1;margin-left:calc(min(24vw,240px) / -2);border-radius:50%;background:radial-gradient(circle,#fff6c4,#ffb457 60%,#ff7a59);box-shadow:0 0 140px 40px rgba(255,170,90,.55)}
+.para .stars{top:0;left:0;width:100%;height:60%;background-image:radial-gradient(2px 2px at 20px 30px,#fff,transparent),radial-gradient(1.5px 1.5px at 90px 80px,#fff,transparent),radial-gradient(2px 2px at 160px 20px,#fff,transparent),radial-gradient(1.5px 1.5px at 230px 110px,#fff,transparent);background-size:260px 140px;opacity:.7}
+.mount{bottom:0;height:62%;background:var(--c);clip-path:polygon(0 100%,0 60%,10% 38%,20% 58%,32% 22%,44% 55%,55% 30%,68% 60%,80% 25%,92% 55%,100% 40%,100% 100%)}
+.m1{--c:#3a2368;bottom:14%}
+.m2{--c:#27174d;bottom:-30px;height:calc(62% + 36px);clip-path:polygon(0 100%,0 50%,14% 30%,26% 52%,40% 18%,52% 50%,66% 26%,78% 54%,90% 30%,100% 48%,100% 100%)}
+.m3{--c:#150c2e;bottom:-110px;height:calc(62% + 110px);clip-path:polygon(0 100%,0 56%,12% 40%,24% 62%,38% 36%,50% 64%,63% 34%,76% 66%,88% 42%,100% 58%,100% 100%)}
+.para .text{position:absolute;top:40%;left:0;right:0;text-align:center;z-index:5;padding:0 20px}
+.para .text h2{font-size:clamp(40px,9vw,120px);text-shadow:0 8px 60px rgba(0,0,0,.5);margin:0}
+.para .text p{color:#f3dff0}
+.para .float{font-size:34px;z-index:4}
+.stars{--s:40px}.sun{--s:120px}.m1{--s:60px}.m2{--s:-30px}.m3{--s:-80px}
+.para .text{--s:50px}.f1{--s:-160px}.f2{--s:-260px}.f3{--s:-90px}
+
+/* ===== 4. Sticky ===== */
+.stack{padding-bottom:20vh}
+.item{position:sticky;top:calc(90px + var(--i) * 26px);margin-bottom:40vh;height:340px;border-radius:26px;padding:38px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid rgba(255,255,255,.14);box-shadow:0 -20px 50px rgba(0,0,0,.35);transform-origin:50% 0}
+.item:last-child{margin-bottom:0}
+.item h3{font-size:clamp(26px,4vw,44px)}
+.item p{max-width:480px;opacity:.85}
+.item .n{font-size:90px;font-weight:900;opacity:.25;line-height:1}
+.item:nth-child(1){background:linear-gradient(135deg,#5b3df5,#8e6bff)}
+.item:nth-child(2){background:linear-gradient(135deg,#0891b2,#22d3ee);color:#04222b}
+.item:nth-child(3){background:linear-gradient(135deg,#e11d74,#ff6b9a)}
+.item:nth-child(4){background:linear-gradient(135deg,#f59e0b,#fcd34d);color:#3b2600}
+.story{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:140px}
+.story .vis{position:sticky;top:0;height:100vh;display:grid;place-items:center}
+.shape{position:relative;width:min(36vw,360px);aspect-ratio:1;background-color:#16a34a;background-image:linear-gradient(135deg,rgba(255,255,255,.4),transparent 70%);border-radius:50%}
+.shape span{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(70px,10vw,130px);opacity:0;scale:.5}
+.shape span:first-child{opacity:1;scale:1}
+.steps>div{min-height:90vh;display:flex;flex-direction:column;justify-content:center}
+.steps h3{font-size:clamp(24px,3.4vw,38px);margin-bottom:8px}
+.steps p{color:var(--muted);max-width:420px}
+@media(max-width:760px){.story{grid-template-columns:1fr}.story .vis{height:42vh;z-index:2;background:linear-gradient(var(--bg) 80%,transparent)}.shape{width:30vh}.steps>div{min-height:70vh}}
+
+/* ===== 5. Scroll Snap（吸附本身两种模式共用同一份 CSS） ===== */
+.snap-box{height:min(74vh,560px);overflow-y:auto;scroll-snap-type:y mandatory;border-radius:24px;border:1px solid var(--line);scrollbar-width:thin;scrollbar-color:var(--accent) transparent;overscroll-behavior:contain}
+.snap-box section{height:100%;scroll-snap-align:start;scroll-snap-stop:always;display:grid;place-items:center;text-align:center;padding:30px}
+.snap-box h3{font-size:clamp(32px,6vw,68px)}
+.snap-box p{opacity:.8}
+.snap-box section:nth-child(1){background:linear-gradient(135deg,#312e81,#6d28d9)}
+.snap-box section:nth-child(2){background:linear-gradient(135deg,#0e7490,#14b8a6)}
+.snap-box section:nth-child(3){background:linear-gradient(135deg,#9d174d,#f43f5e)}
+.snap-box section:nth-child(4){background:linear-gradient(135deg,#b45309,#f59e0b)}
+.snap-note{margin:18px 0 10px;color:var(--muted);font-size:14px}
+.hsnap{display:flex;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;padding:20px calc(50% - 170px) 30px;scrollbar-width:thin;scrollbar-color:var(--accent) transparent}
+.hsnap .slide{flex:0 0 340px;height:380px;scroll-snap-align:center;border-radius:22px;padding:26px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff;font-size:20px;font-weight:700;position:relative;overflow:hidden}
+.hsnap .slide span{position:absolute;top:10px;left:20px;font-size:100px;font-weight:900;opacity:.25;line-height:1}
+.hsnap .slide small{font-weight:400;opacity:.85;font-size:14px;margin-top:4px}
+@media(max-width:520px){.hsnap{padding-inline:calc(50% - 40vw)}.hsnap .slide{flex-basis:80vw}}
+
+/* ===== 6. 横向滚动 ===== */
+.hs{background:var(--bg2);position:relative}
+.hs .pin{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;align-items:center}
+.hs .track{display:flex;gap:32px;padding:0 8vw;width:max-content;align-items:center;will-change:transform}
+.hs .intro{flex:0 0 min(80vw,520px)}
+.hs .intro h2{font-size:clamp(34px,6vw,74px)}
+.hs .panel{flex:0 0 min(70vw,520px);height:min(62vh,440px);border-radius:28px;padding:34px;display:flex;flex-direction:column;justify-content:space-between;color:#fff}
+.hs .panel .n{font-size:clamp(70px,12vw,140px);font-weight:900;line-height:1;opacity:.28}
+.hs .panel h3{font-size:clamp(24px,3.4vw,40px)}
+.hs .panel p{opacity:.85;margin-top:6px}
+.hs .panel:nth-child(2){background:linear-gradient(135deg,#6d28d9,#a78bfa)}
+.hs .panel:nth-child(3){background:linear-gradient(135deg,#0e7490,#22d3ee)}
+.hs .panel:nth-child(4){background:linear-gradient(135deg,#be185d,#fb7185)}
+.hs .panel:nth-child(5){background:linear-gradient(135deg,#b45309,#fbbf24)}
+.hs .panel:nth-child(6){background:linear-gradient(135deg,#047857,#34d399)}
+.hbar{position:absolute;left:8vw;right:8vw;bottom:9vh;height:4px;background:var(--line);border-radius:4px;overflow:hidden}
+.hbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transform-origin:0 50%;transform:scaleX(0)}
+.hs-after{padding:70px 0 0}
+
+/* ===== 总结 ===== */
+.compare{margin-top:30px;border:1px solid var(--line);border-radius:18px;overflow:hidden;font-size:14px}
+.compare div{display:grid;grid-template-columns:130px 1fr 1fr;gap:14px;padding:13px 20px;border-top:1px solid var(--line)}
+.compare div:first-child{border-top:0;background:var(--bg2);color:var(--muted)}
+.compare b{color:var(--fg)}
+.compare .g{color:#a7f3d0}.compare .y{color:#fde68a}
+@media(max-width:700px){.compare div{grid-template-columns:90px 1fr}.compare div>:nth-child(3){grid-column:2;color:var(--muted)}}
+.decide{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:30px}
+.decide .card h3{font-size:17px}
+footer{text-align:center;color:var(--muted);font-size:13px;padding:80px 24px 40px}
+
+/* ============================================================
+   模式 A：JS 驱动（html[data-mode=js]）
+   JS 只负责算数并写 inline style / 加 class，这里是它依赖的样式
+   ============================================================ */
+[data-mode=js] .rv{opacity:0;transition:opacity .8s cubic-bezier(.2,.7,.2,1),translate .8s cubic-bezier(.2,.7,.2,1),scale .8s cubic-bezier(.2,.7,.2,1),rotate .8s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--i,0) * 90ms)}
+[data-mode=js] .rv-up{translate:0 60px}
+[data-mode=js] .rv-left{translate:-80px 0}
+[data-mode=js] .rv-right{translate:80px 0}
+[data-mode=js] .rv-zoom{scale:.75}
+[data-mode=js] .rv-rot{rotate:-10deg;translate:0 50px}
+[data-mode=js] .rv.in{opacity:1;translate:none;scale:none;rotate:none}
+[data-mode=js] .steps>div{opacity:.15;transition:opacity .5s}
+[data-mode=js] .steps>div.on{opacity:1}
+[data-mode=js] .shape{transition:background-color .8s,border-radius .8s,rotate .8s}
+[data-mode=js] .shape span{transition:opacity .5s,scale .5s}
+[data-mode=js] .shape.s1{background-color:#0284c7;border-radius:28%;rotate:90deg}
+[data-mode=js] .shape.s2{background-color:#ea580c;border-radius:8%;rotate:180deg}
+[data-mode=js] .shape.s3{background-color:#7c3aed;border-radius:50% 10% 50% 10%;rotate:270deg}
+[data-mode=js] .shape:not(.s0):not(:where(.s1,.s2,.s3)) span:first-child{opacity:1;scale:1}
+[data-mode=js] .shape.s1 span:first-child,[data-mode=js] .shape.s2 span:first-child,[data-mode=js] .shape.s3 span:first-child{opacity:0;scale:.5}
+[data-mode=js] .shape.s1 span:nth-child(2),[data-mode=js] .shape.s2 span:nth-child(3),[data-mode=js] .shape.s3 span:nth-child(4){opacity:1;scale:1}
+[data-mode=js] .hs{/* 高度由 JS 测量内容宽度后写入 */}
+@media (prefers-reduced-motion:reduce){[data-mode=js] .rv{transition:none}}
+
+/* ============================================================
+   模式 B：CSS 驱动（html[data-mode=css]）—— 无任何 JS 参与滚动动画
+   ============================================================ */
+@supports (animation-timeline:view()){
+@media (prefers-reduced-motion:no-preference){
+
+  /* 全局阅读进度：匿名 scroll 时间线，源 = 根滚动容器 */
+  [data-mode=css] #bar{animation:grow-x linear both;animation-timeline:scroll(root)}
+  @keyframes grow-x{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+  /* 1. 入场：view() 时间线 + entry 范围（注意：animation-timeline 必须写在 animation 简写之后） */
+  [data-mode=css] .rv{animation-timing-function:ease-out;animation-fill-mode:both;animation-timeline:view();
+      animation-range:entry calc(var(--i,0) * 6%) entry calc(45% + var(--i,0) * 6%)}
+  [data-mode=css] .rv-up{animation-name:rv-up}
+  [data-mode=css] .rv-left{animation-name:rv-left}
+  [data-mode=css] .rv-right{animation-name:rv-right}
+  [data-mode=css] .rv-zoom{animation-name:rv-zoom}
+  [data-mode=css] .rv-rot{animation-name:rv-rot}
+  @keyframes rv-up{from{opacity:0;translate:0 60px}}
+  @keyframes rv-left{from{opacity:0;translate:-80px 0}}
+  @keyframes rv-right{from{opacity:0;translate:80px 0}}
+  @keyframes rv-zoom{from{opacity:0;scale:.75}}
+  @keyframes rv-rot{from{opacity:0;rotate:-10deg;translate:0 50px}}
+
+  [data-mode=css] .num{animation:count linear both;animation-timeline:view();animation-range:entry 10% entry 90%}
+  @keyframes count{from{--n:0}to{--n:var(--to)}}
+
+  [data-mode=css] .sweep{animation:sweep linear both;animation-timeline:view();animation-range:entry 30% cover 55%}
+  @keyframes sweep{to{background-size:100% 100%,100% 100%}}
+
+  /* 2. 滚动联动：命名视图时间线 + 把 range 锁在 sticky 钉住的那一段 */
+  [data-mode=css] .linked{view-timeline:--lk block}
+  [data-mode=css] .linked .orb,[data-mode=css] .linked .bigword,[data-mode=css] .linked .meter i,
+  [data-mode=css] .linked svg.path path,[data-mode=css] .linked .readout{
+    animation-timing-function:linear;animation-fill-mode:both;
+    animation-timeline:--lk;animation-range:cover 100vh cover calc(100% - 100vh)}
+  [data-mode=css] .orb{animation-name:orb}
+  @keyframes orb{0%{scale:.35;rotate:0deg;filter:hue-rotate(0deg)}50%{scale:1.25}100%{scale:.5;rotate:540deg;filter:hue-rotate(300deg)}}
+  [data-mode=css] .bigword{animation-name:word}
+  @keyframes word{from{letter-spacing:-.05em;translate:0 -30px;scale:.8}to{letter-spacing:.25em;translate:0 30px;scale:1.1}}
+  [data-mode=css] .meter i{animation-name:meter}
+  @keyframes meter{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+  [data-mode=css] svg.path path{animation-name:draw}
+  @keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+  [data-mode=css] .readout{animation-name:pct}
+  @keyframes pct{from{--p:0}to{--p:100}}
+
+  /* 3. 视差：同一份关键帧，层与层之间只差一个 --s */
+  [data-mode=css] .para{view-timeline:--para block}
+  [data-mode=css] .para .layer,[data-mode=css] .para .float,[data-mode=css] .para .text{
+    animation:plx linear both;animation-timeline:--para;animation-range:cover 0% cover 100%}
+  @keyframes plx{from{translate:0 calc(var(--s) * -1)}to{translate:0 var(--s)}}
+
+  /* 4. Sticky 叠卡：被盖住进度 = “下一张卡”从下方滑到钉住位置的最后 340px */
+  [data-mode=css] .stack{timeline-scope:--c1,--c2,--c3}
+  [data-mode=css] .item:nth-child(1){--tl:--c1}
+  [data-mode=css] .item:nth-child(2){view-timeline:--c1 block;--tl:--c2}
+  [data-mode=css] .item:nth-child(3){view-timeline:--c2 block;--tl:--c3}
+  [data-mode=css] .item:nth-child(4){view-timeline:--c3 block}
+  [data-mode=css] .item:not(:last-child){
+    animation:shrink linear both;animation-timeline:var(--tl);
+    animation-range:cover calc(100vh - 340px - 90px - (var(--i) + 1) * 26px) cover calc(100vh - 90px - (var(--i) + 1) * 26px)}
+  @keyframes shrink{to{scale:.92;filter:brightness(.55)}}
+
+  [data-mode=css] .story{view-timeline:--st block}
+  [data-mode=css] .shape,[data-mode=css] .shape span{animation-fill-mode:both;animation-timing-function:ease-in-out;
+    animation-timeline:--st;animation-range:cover 100vh cover calc(100% - 100vh)}
+  [data-mode=css] .shape{animation-name:morph}
+  @keyframes morph{
+    0%,20%{background-color:#16a34a;border-radius:50%;rotate:0deg}
+    30%,45%{background-color:#0284c7;border-radius:28%;rotate:90deg}
+    55%,70%{background-color:#ea580c;border-radius:8%;rotate:180deg}
+    80%,100%{background-color:#7c3aed;border-radius:50% 10% 50% 10%;rotate:270deg}}
+  [data-mode=css] .shape span:nth-child(1){animation-name:e1}
+  [data-mode=css] .shape span:nth-child(2){animation-name:e2}
+  [data-mode=css] .shape span:nth-child(3){animation-name:e3}
+  [data-mode=css] .shape span:nth-child(4){animation-name:e4}
+  @keyframes e1{0%,20%{opacity:1;scale:1}30%,100%{opacity:0;scale:.5}}
+  @keyframes e2{0%,20%{opacity:0;scale:.5}30%,45%{opacity:1;scale:1}55%,100%{opacity:0;scale:.5}}
+  @keyframes e3{0%,45%{opacity:0;scale:.5}55%,70%{opacity:1;scale:1}80%,100%{opacity:0;scale:.5}}
+  @keyframes e4{0%,70%{opacity:0;scale:.5}80%,100%{opacity:1;scale:1}}
+  [data-mode=css] .steps>div{animation:step linear both;animation-timeline:view();animation-range:cover 0% cover 100%}
+  @keyframes step{0%,100%{opacity:.15}50%{opacity:1}}
+
+  /* 5. 容器内联动：view() 默认以“最近的滚动容器”为 scroller；横向用 view(inline) */
+  [data-mode=css] .snap-box section>div{animation:snap-in linear both;animation-timeline:view();animation-range:entry 10% cover 50%}
+  @keyframes snap-in{from{opacity:0;translate:0 60px;scale:.8}}
+  [data-mode=css] .hsnap .slide{animation:slide-pop linear both;animation-timeline:view(inline)}
+  @keyframes slide-pop{0%,100%{scale:.82;opacity:.45}50%{scale:1;opacity:1}}
+
+  /* 6. 横向滚动：高度固定，百分比取轨道自身宽度，无需任何测量 */
+  [data-mode=css] .hs{height:520vh;view-timeline:--hs block}
+  [data-mode=css] .hs .track{animation:hmove linear both;animation-timeline:--hs;animation-range:cover 100vh cover calc(100% - 100vh)}
+  @keyframes hmove{to{translate:calc(-100% + 100vw) 0}}
+  [data-mode=css] .hbar i{animation:grow-x linear both;animation-timeline:--hs;animation-range:cover 100vh cover calc(100% - 100vh)}
+}}
+@media (prefers-reduced-motion:reduce){.sweep{background-size:100% 100%,100% 100%}.meter i{transform:none}svg.path path{stroke-dashoffset:0}}
+</style>
+</head>
+<body>
+
+<div id="bar"></div>
+<nav>
+  <a href="#overview">原理总览</a>
+  <a href="#triggered">触发式</a>
+  <a href="#linked">滚动联动</a>
+  <a href="#parallax">视差</a>
+  <a href="#sticky">Sticky</a>
+  <a href="#snap">Scroll Snap</a>
+  <a href="#horizontal">横向滚动</a>
+  <a href="#summary">总结</a>
+</nav>
+
+<div id="hud">
+  <div>当前模式 <b id="hMode" class="js">JS</b></div>
+  <div>JS 滚动回调/秒 <b id="hCb">0</b></div>
+  <div>主线程 FPS <b id="hFps">60</b></div>
+  <div>scrollY <b id="hy">0</b></div>
+</div>
+<div id="nosup">当前浏览器不支持 <code>animation-timeline</code>，CSS 模式不可用（Chrome / Edge 115+、Safari 26+ 可用）</div>
+<div id="dock">
+  <div class="seg" role="group" aria-label="切换实现方式">
+    <button data-m="js" aria-pressed="true">JS</button>
+    <button data-m="css" aria-pressed="false">CSS</button>
+  </div>
+  <button id="stress" aria-pressed="false" title="周期性阻塞主线程，观察两种实现的差别">🔥 主线程压力</button>
+</div>
+
+<!-- ========== HERO ========== -->
+<header class="hero">
+  <div>
+    <span class="tag">Scroll Animation Lab</span>
+    <h1>同一页面<br>两种实现</h1>
+    <p>下面的 6 种滚动动画，每一种都同时写了 <span class="pill js">JS</span> 和 <span class="pill css">CSS animation-timeline</span> 两个版本。用底部开关随时切换，对比效果、性能和代码。</p>
+    <div class="howto">
+      <div><b>① 切换实现</b>点击底部的 JS / CSS 开关。页面会实时换成另一套实现，滚动位置保持不变。</div>
+      <div><b>② 看 HUD 数字</b>左下角的“JS 滚动回调/秒”：JS 模式持续有数字，CSS 模式下滚动动画不再有 JS 回调，数字归零。</div>
+      <div><b>③ 压力测试</b>点“🔥 主线程压力”，再快速滚动：JS 动画会掉帧、滞后，CSS 动画依然跟手。</div>
+      <div><b>④ 读原理</b>每个演示后面都有“原理与实现”面板，两种代码并排，当前运行的那份会高亮。</div>
+    </div>
+  </div>
+</header>
+
+<!-- ========== 原理总览 ========== -->
+<section class="block" id="overview">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="tag">00 · 原理总览</span>
+      <h2>谁在算“动画进度”？</h2>
+      <p class="lead">所有滚动动画的本质，都是把“滚动位置”映射成“动画进度 p ∈ [0, 1]”，再把 p 映射成样式。两条路线的区别，只在于<b>由谁来做这个映射</b>：是你写的 JS，还是浏览器内置的“滚动时间线”。</p>
+    </div>
+
+    <div class="two">
+      <div class="route js">
+        <h3><span class="pill js">JS</span> 路线：监听 → 计算 → 写样式</h3>
+        <p>每次滚动，主线程执行你的回调：读几何信息、算进度、把结果写进 style，再由浏览器走一遍渲染流水线。</p>
+        <div class="pipe">
+          <span class="main">scroll 事件 / IO</span><i>→</i>
+          <span class="main">主线程回调</span><i>→</i>
+          <span class="main">读布局<br>getBoundingClientRect</span><i>→</i>
+          <span class="main">算进度 f(p)</span><i>→</i>
+          <span class="main">写 style</span><i>→</i>
+          <span class="main">样式/布局/绘制</span><i>→</i>
+          <span class="comp">合成</span>
+        </div>
+        <div class="legend"><span class="main">■ 主线程</span>　<span class="comp">■ 合成器线程</span></div>
+        <ul>
+          <li>灵活：进度能参与任意逻辑（判断、状态机、联动 Canvas / WebGL）。</li>
+          <li>现代浏览器的滚动本身在合成器线程完成，JS 回调总是“事后”才执行，因此 scroll-linked 动画天然会<b>滞后一帧</b>，快速滚动时 sticky + 视差容易“漂移”。</li>
+          <li>主线程繁忙（长任务、布局抖动）时动画会直接掉帧。</li>
+          <li>优化手段：<code>requestAnimationFrame</code> 合并、<code>passive</code> 监听、读写分离、只改 transform/opacity，以及用 IntersectionObserver 代替 scroll 监听做“触发”。</li>
+        </ul>
+      </div>
+      <div class="route css">
+        <h3><span class="pill css">CSS</span> 路线：把时间换成滚动</h3>
+        <p>普通动画的“时间轴”是时钟；<b>滚动时间线</b>把它换成滚动位置。关键帧不变，只是 currentTime 由滚动进度决定。</p>
+        <div class="pipe">
+          <span class="comp">滚动位置</span><i>→</i>
+          <span class="comp">时间线进度 0–100%</span><i>→</i>
+          <span class="comp">animation-range 映射</span><i>→</i>
+          <span class="comp">关键帧插值</span><i>→</i>
+          <span class="comp">合成</span>
+        </div>
+        <div class="legend"><span class="main">■ 主线程</span>　<span class="comp">■ 合成器线程</span></div>
+        <ul>
+          <li>声明式：进度计算、节流、读写时序都交给浏览器。</li>
+          <li>对 <code>transform</code>、<code>opacity</code> 等可合成属性，动画可以<b>完全在合成器线程运行</b>，与滚动同帧同步，不受主线程阻塞。</li>
+          <li>注意：动画非合成属性（如 <code>letter-spacing</code>、注册的自定义属性 <code>--n</code>）仍会回到主线程。</li>
+          <li>限制：只能表达“进度 → 样式”的连续映射，不擅长条件逻辑与一次性触发；需要较新的浏览器。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="concepts">
+      <div><span>核心概念</span><span>含义</span></div>
+      <div><span>animation-timeline: scroll()</span><span><b>滚动进度时间线</b>。进度 = 滚动容器已滚动距离 / 可滚动总距离。<code>scroll(root block)</code> 表示根容器的垂直滚动。常用于阅读进度条。</span></div>
+      <div><span>animation-timeline: view()</span><span><b>视图进度时间线</b>。进度 = 目标元素穿过滚动容器可视区域的程度。默认以最近的祖先滚动容器为 scroller，<code>view(inline)</code> 取横向轴。</span></div>
+      <div><span>view-timeline / scroll-timeline</span><span>给时间线<b>命名</b>（如 <code>--lk</code>），其他元素用 <code>animation-timeline: --lk</code> 引用，从而用“A 的位置”驱动“B 的动画”。</span></div>
+      <div><span>timeline-scope</span><span>命名时间线默认只对声明者及其后代可见；要让<b>兄弟 / 其他分支</b>的元素引用，需要在共同祖先上声明 <code>timeline-scope: --name</code>。</span></div>
+      <div><span>animation-range</span><span>把时间线的<b>某一段</b>映射为动画的 0–100%。可用 <code>cover / contain / entry / exit / entry-crossing / exit-crossing</code> 加百分比，也可用长度，如 <code>cover 100vh</code>。</span></div>
+      <div><span>animation 简写的坑</span><span><code>animation</code> 简写会把 <code>animation-timeline</code> 重置为 <code>auto</code>，所以 <code>animation-timeline</code> 必须写在简写<b>之后</b>。</span></div>
+    </div>
+
+    <div class="rangeviz">
+      <h4>view() 时间线的几个“范围”（元素比视口小的情形）</h4>
+      <div class="rbar">
+        <div class="brk cover">cover 0% → 100%：整个穿越过程</div>
+        <div class="seg3 entry">entry</div>
+        <div class="seg3 contain">contain</div>
+        <div class="seg3 exit">exit</div>
+        <div class="tick" style="left:0">元素顶边碰到<br>视口底边</div>
+        <div class="tick" style="left:30%">元素完全<br>进入视口</div>
+        <div class="tick" style="left:70%">元素开始<br>离开视口</div>
+        <div class="tick" style="left:100%">元素完全<br>离开视口</div>
+      </div>
+      <div class="formula">进度 = clamp( (当前滚动位置 − 范围起点) / (范围终点 − 范围起点), 0, 1 )</div>
+      <p class="lead" style="margin-top:12px;font-size:14px">这与 JS 版里的 <code>clamp(-rect.top / (height - innerHeight))</code> 是同一个公式，区别只在于由浏览器的滚动线程来算，还是由你的 JS 来算。元素比视口大时，<code>contain</code> 范围会反转，所以本页对“很高的 sticky 容器”统一使用长度写法 <code>cover 100vh cover calc(100% - 100vh)</code>。</p>
+    </div>
+
+    <div class="mapping">
+      <div><span>需求</span><span>JS 做法</span><span>CSS 做法</span></div>
+      <div><b>触发入场</b><span>IntersectionObserver + class</span><span>view() + entry 范围（连续映射）</span></div>
+      <div><b>阅读进度条</b><span>scrollY / 最大滚动 → scaleX</span><span>scroll(root)</span></div>
+      <div><b>区块内进度</b><span>getBoundingClientRect 算 p</span><span>命名 view-timeline + range</span></div>
+      <div><b>视差</b><span>rAF 里算 translate</span><span>同一关键帧 + --s 变量</span></div>
+      <div><b>粘性定位</b><span>position: sticky（共用）</span><span>position: sticky（共用）</span></div>
+      <div><b>滚动吸附</b><span>scroll-snap（共用）</span><span>scroll-snap（共用）</span></div>
+      <div><b>横向滚动</b><span>测 scrollWidth，写 translateX</span><span>translate: calc(-100% + 100vw)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 1. 触发式 ========== -->
+<section class="block" id="triggered">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="tag rv rv-up">01 · Scroll-triggered</span>
+      <h2 class="rv rv-up" style="--i:1">触发式：进入视口时播放</h2>
+      <p class="lead rv rv-up" style="--i:2">切换上方开关，反复向上、向下滚动：JS 模式下元素进入一次就播完、不会倒放；CSS 模式下动画跟着滚动位置“拖动”，往回滚会倒放。</p>
+    </div>
+
+    <div class="grid">
+      <div class="card rv rv-up" style="--i:0"><div class="ico">⬆️</div><h3>上浮淡入</h3><p>translate + opacity。</p></div>
+      <div class="card rv rv-left" style="--i:1"><div class="ico">⬅️</div><h3>左侧滑入</h3><p>--i 控制错峰顺序。</p></div>
+      <div class="card rv rv-zoom" style="--i:2"><div class="ico">🔍</div><h3>缩放弹入</h3><p>独立的 scale 属性。</p></div>
+      <div class="card rv rv-right" style="--i:3"><div class="ico">➡️</div><h3>右侧滑入</h3><p>方向组合产生节奏。</p></div>
+      <div class="card rv rv-rot" style="--i:4"><div class="ico">🌀</div><h3>旋转入场</h3><p>rotate + translate。</p></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat rv rv-zoom" style="--i:0"><b class="num" style="--to:12800"></b><span>数字滚动</span></div>
+      <div class="stat rv rv-zoom" style="--i:1"><b class="num" style="--to:98;--suf:'%'"></b><span>满意度</span></div>
+      <div class="stat rv rv-zoom" style="--i:2"><b class="num" style="--to:360"></b><span>项目</span></div>
+      <div class="stat rv rv-zoom" style="--i:3"><b class="num" style="--to:24"></b><span>国家</span></div>
+    </div>
+
+    <p class="sweep">这段文字随着滚动从左到右被逐渐点亮，用 background-size 加 background-clip: text 实现。</p>
+
+    <div class="explain">
+      <h3>原理与实现：触发式</h3>
+      <h4>它到底是什么</h4>
+      <p>“触发式”是<b>离散事件</b>：元素越过阈值 → 开始播一段有固定时长的动画 → 播完就与滚动无关。JS 路线天生适合，因为 IntersectionObserver 由浏览器在内部异步、批量地计算交叉比例，回调很少，只需要加一个 class，具体动画交给 CSS transition（可合成）。</p>
+      <p style="margin-top:8px">滚动时间线是<b>连续映射</b>，没有“触发一次”的概念。所以 CSS 版的入场动画其实是“绑定在 entry 范围上的拖动动画”：在元素从视口底部露出的那一小段滚动距离里完成，往回滚就倒放。它很适合“跟手”的入场，但不等于“触发一次”。真正的一次性 CSS 触发属于仍在讨论中的新提案，目前不能依赖。</p>
+
+      <div class="code2">
+        <figure class="js"><figcaption>JS 实现</figcaption><pre><span class="c">// 1. 观察元素，进入视口就加 class（一次性）</span>
+<span class="k">const</span> io = <span class="k">new</span> IntersectionObserver(entries =&gt; {
+  entries.forEach(e =&gt; {
+    <span class="k">if</span> (!e.isIntersecting) <span class="k">return</span>;
+    e.target.classList.add(<span class="s">'in'</span>);
+    io.unobserve(e.target);
+  });
+}, { threshold: <span class="v">0.18</span>, rootMargin: <span class="s">'0px 0px -6% 0px'</span> });
+document.querySelectorAll(<span class="s">'.rv'</span>).forEach(el =&gt; io.observe(el));
+
+<span class="c">/* 2. CSS 只负责“播放”（transition 可合成） */</span>
+.rv{ opacity:0; translate:0 60px;
+  transition: opacity .8s, translate .8s;
+  transition-delay: calc(var(--i) * 90ms) }
+.rv.in{ opacity:1; translate:none }
+
+<span class="c">// 3. 数字滚动：rAF 里写注册过的 --n</span>
+el.style.setProperty(<span class="s">'--n'</span>, Math.round(to * ease(t)))</pre></figure>
+        <figure class="css"><figcaption>CSS 实现</figcaption><pre><span class="c">/* 1. 入场：view() 时间线 + entry 范围 */</span>
+.rv{
+  animation: rv-up linear both;
+  animation-timeline: <span class="v">view()</span>;           <span class="c">/* 必须写在简写之后 */</span>
+  animation-range: <span class="v">entry</span> calc(var(--i) * 6%)
+                   <span class="v">entry</span> calc(45% + var(--i) * 6%);
+}                                        <span class="c">/* 用 range 起点偏移做错峰 */</span>
+<span class="k">@keyframes</span> rv-up{ from{ opacity:0; translate:0 60px } }
+
+<span class="c">/* 2. 数字滚动：@property 让整数可插值 */</span>
+<span class="k">@property</span> --n{ syntax:<span class="s">"&lt;integer&gt;"</span>; initial-value:0; inherits:false }
+<span class="k">@keyframes</span> count{ from{ --n:0 } to{ --n:var(--to) } }
+.num{ animation: count linear both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 90%;
+      counter-reset: n var(--n) }
+.num::after{ content: counter(n) }
+
+<span class="c">/* 3. 文字点亮：动画 background-size */</span>
+<span class="k">@keyframes</span> sweep{ to{ background-size:100% 100%,100% 100% } }</pre></figure>
+      </div>
+      <div class="note">坑：① IO 的 <code>rootMargin</code> / <code>threshold</code> 决定“何时算进入”；② 没有 JS 时 <code>.rv</code> 被隐藏会导致内容不可见，生产环境应只在 JS 就绪后才加隐藏样式（本页用 <code>data-mode</code> 属性限定）；③ CSS 自定义属性动画（<code>--n</code>）跑在主线程，不是合成动画。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 2. 滚动联动 ========== -->
+<section class="linked" id="linked">
+  <div class="stage">
+    <div class="meter"><i></i></div>
+    <div class="bigword">LINKED</div>
+    <div class="orb"></div>
+    <svg class="path" viewBox="0 0 200 300"><path pathLength="1" d="M20 20 C 180 20, 180 100, 100 130 S 20 220, 180 280"/></svg>
+    <div class="info">
+      <span class="tag">02 · Scroll-linked</span><span class="modebadge"></span>
+      <h3>动画进度 = 滚动进度</h3>
+      <p class="lead" style="margin:6px auto 0">球体缩放/旋转/变色、路径描边、字距伸缩，全部由同一个进度驱动。往回滚会倒放。</p>
+      <div class="readout"></div>
+    </div>
+  </div>
+</section>
+<div class="wrap">
+  <div class="explain" style="margin-top:60px">
+    <h3>原理与实现：滚动联动</h3>
+    <h4>模型：sticky 舞台 + 一段“滚动跑道”</h4>
+    <p>外层 <code>.linked</code> 高 400vh，里面的 <code>.stage</code> 是 <code>position: sticky; height: 100vh</code>。用户在这 400vh 里滚动时，舞台被“钉”在屏幕上，而滚动距离就成了动画的“进度条”。关键是算出<b>钉住阶段</b>对应的滚动区间：</p>
+    <div class="diag">外层高度 H = 400vh，视口高度 V = 100vh
+cover 范围总长度 = H + V      （元素顶边碰到视口底边 → 元素底边离开视口顶边）
+钉住开始 = 外层顶边到达视口顶边 = 已滚动 V
+钉住结束 = 外层底边到达视口底边 = 已滚动 H
+⇒ animation-range: cover 100vh  cover calc(100% - 100vh)
+   （百分比以 cover 总长度 H + V 为基准，所以 100% - 100vh = H）</div>
+    <div class="code2">
+      <figure class="js"><figcaption>JS 实现</figcaption><pre><span class="k">function</span> update(){
+  <span class="k">const</span> r = linked.getBoundingClientRect();
+  <span class="k">const</span> p = clamp(-r.top / (r.height - innerHeight));
+
+  orb.style.scale  = p &lt; .5 ? lerp(.35, 1.25, p*2)
+                           : lerp(1.25, .5, (p-.5)*2);
+  orb.style.rotate = p * 540 + <span class="s">'deg'</span>;
+  orb.style.filter = <span class="s">`hue-rotate(${p*300}deg)`</span>;
+  draw.style.strokeDashoffset = 1 - p;       <span class="c">// pathLength="1"</span>
+  readout.style.setProperty(<span class="s">'--p'</span>, Math.round(p*100));
+}
+<span class="c">// 用 rAF 合并多次 scroll 事件</span>
+addEventListener(<span class="s">'scroll'</span>, () =&gt; {
+  <span class="k">if</span> (!ticking) { ticking = <span class="k">true</span>; requestAnimationFrame(frame); }
+}, { passive: <span class="k">true</span> });</pre></figure>
+      <figure class="css"><figcaption>CSS 实现</figcaption><pre><span class="c">/* 给外层命名时间线，舞台里的元素共用它 */</span>
+.linked{ view-timeline: <span class="v">--lk</span> block }
+
+.orb, .bigword, .meter i, .path path, .readout{
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: <span class="v">--lk</span>;
+  animation-range: <span class="v">cover 100vh cover calc(100% - 100vh)</span>;
+}
+.orb{ animation-name: orb }
+<span class="k">@keyframes</span> orb{
+  0%  { scale:.35; rotate:0deg;   filter:hue-rotate(0) }
+  50% { scale:1.25 }
+  100%{ scale:.5;  rotate:540deg; filter:hue-rotate(300deg) }
+}
+<span class="k">@keyframes</span> draw{ from{ stroke-dashoffset:1 } to{ stroke-dashoffset:0 } }
+<span class="k">@keyframes</span> pct { from{ --p:0 } to{ --p:100 } }   <span class="c">/* 配合 @property */</span></pre></figure>
+    </div>
+    <div class="note ok">对比：JS 版每一帧要读布局（getBoundingClientRect）再写样式；滚动由合成器先走，JS 稍后才跟上，所以开启“主线程压力”后，球体会明显滞后于画面。CSS 版里 <code>scale / rotate / filter</code> 可在合成器线程插值，仍然与滚动同步。</div>
+  </div>
+</div>
+
+<!-- ========== 3. 视差 ========== -->
+<section class="para" id="parallax" style="margin-top:100px">
+  <div class="layer stars"></div>
+  <div class="layer sun"></div>
+  <div class="float f1" style="left:12%;top:20%">☁️</div>
+  <div class="float f2" style="left:78%;top:34%;font-size:48px">☁️</div>
+  <div class="float f3" style="left:60%;top:12%">✨</div>
+  <div class="layer mount m1"></div>
+  <div class="text">
+    <span class="tag">03 · Parallax</span><span class="modebadge"></span>
+    <h2>视差滚动</h2>
+    <p>各图层只差一个 <code>--s</code>，JS 与 CSS 共用同一组数值</p>
+  </div>
+  <div class="layer mount m2"></div>
+  <div class="layer mount m3"></div>
+</section>
+<div class="wrap">
+  <div class="explain" style="margin-top:60px">
+    <h3>原理与实现：视差</h3>
+    <h4>视差 = 不同图层以不同比例响应同一个滚动</h4>
+    <p>设区块的穿越进度为 t（0→1，即 <code>cover</code> 范围），每层有一个速度量 <code>--s</code>，位移 = <code>lerp(-s, s, t)</code>。正数 = 比页面慢（远景，如太阳、星空），负数 = 比页面快（近景，如云、前景山）。本页两种实现读取的是同一组 <code>--s</code>，所以画面应当一致。</p>
+    <div class="code2">
+      <figure class="js"><figcaption>JS 实现</figcaption><pre><span class="c">// 初始化时从 CSS 读取每层的 --s</span>
+<span class="k">const</span> layers = [...document.querySelectorAll(<span class="s">'.para .layer, .para .float, .para .text'</span>)]
+  .map(el =&gt; ({ el, s: parseFloat(getComputedStyle(el).getPropertyValue(<span class="s">'--s'</span>)) }));
+
+<span class="k">function</span> updateParallax(){
+  <span class="k">const</span> r = para.getBoundingClientRect();
+  <span class="k">const</span> t = clamp((innerHeight - r.top) / (innerHeight + r.height));
+  layers.forEach(({ el, s }) =&gt; {
+    el.style.translate = <span class="s">`0 ${lerp(-s, s, t)}px`</span>;
+  });
+}</pre></figure>
+      <figure class="css"><figcaption>CSS 实现</figcaption><pre>.para{ view-timeline: <span class="v">--para</span> block }
+
+.para .layer, .para .float, .para .text{
+  animation: plx linear both;
+  animation-timeline: <span class="v">--para</span>;
+  animation-range: cover 0% cover 100%;
+}
+<span class="k">@keyframes</span> plx{
+  from{ translate: 0 calc(var(--s) * -1) }
+  to  { translate: 0 var(--s) }
+}
+<span class="c">/* 每层只声明速度量 */</span>
+.sun{ --s: 120px }  .m1{ --s: 60px }
+.m2{ --s: -30px }   .m3{ --s: -80px }</pre></figure>
+    </div>
+    <div class="note">实战要点：只动画 <code>translate / transform</code>；父容器 <code>overflow:hidden</code> 防止位移后露边（最前景山脉故意向下多铺了一截）；避免 <code>background-attachment: fixed</code>（移动端不稳定）；也可以用 <code>perspective + translateZ</code> 的纯 CSS 3D 视差，但它要求内容放在独立滚动容器内。</div>
+  </div>
+</div>
+
+<!-- ========== 4. Sticky ========== -->
+<section class="block" id="sticky">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="tag">04 · Sticky</span><span class="modebadge"></span>
+      <h2>粘性定位</h2>
+      <p class="lead"><code>position: sticky</code> 是布局特性，两种模式共用。区别在于“钉住之后的动画”：叠卡缩放，以及右侧 scrollytelling 的画面变化。</p>
+    </div>
+
+    <div class="stack">
+      <article class="item" style="--i:0"><div><h3>① 吸顶</h3><p>每张卡设置不同的 top 偏移。</p></div><div class="n">01</div></article>
+      <article class="item" style="--i:1"><div><h3>② 叠放</h3><p>后一张滚上来覆盖前一张。</p></div><div class="n">02</div></article>
+      <article class="item" style="--i:2"><div><h3>③ 缩放变暗</h3><p>被盖住的卡片随“下一张卡”的位置缩小、变暗。</p></div><div class="n">03</div></article>
+      <article class="item" style="--i:3"><div><h3>④ 收尾</h3><p>sticky 到父容器结束为止。</p></div><div class="n">04</div></article>
+    </div>
+
+    <div class="story">
+      <div class="vis"><div class="shape"><span>🌱</span><span>💧</span><span>🔥</span><span>🚀</span></div></div>
+      <div class="steps">
+        <div><h3>左侧画面固定</h3><p>用 sticky 钉住，右侧文案正常滚动。</p></div>
+        <div><h3>颜色与圆角变化</h3><p>JS 模式是“切换 class + transition”（离散），CSS 模式是连续插值。</p></div>
+        <div><h3>emoji 交叉淡入</h3><p>留意两种模式下形变的“手感”差异。</p></div>
+        <div><h3>文案点亮</h3><p>JS 用 IO 加 .on，CSS 用 view() 关键帧。</p></div>
+      </div>
+    </div>
+
+    <div class="explain">
+      <h3>原理与实现：Sticky</h3>
+      <h4>sticky 本身是怎么工作的</h4>
+      <ul>
+        <li>元素在<b>最近的滚动祖先</b>里先按正常流动，滚到 <code>top</code> 阈值后被“钉住”，直到<b>父元素（containing block）</b>的底边追上它，随后跟着父元素一起离开。</li>
+        <li>失效的常见原因：祖先设置了 <code>overflow: hidden / auto</code>（成了新的滚动祖先）、父元素高度不够、没有写 <code>top</code>。</li>
+        <li>叠卡效果：每张卡的 <code>top</code> 依次增加 26px，并给每张卡一段 <code>margin-bottom</code> 作为“滚动跑道”。</li>
+      </ul>
+      <h4>难点：钉住之后元素自己的位置不再变化</h4>
+      <p>想让被盖住的卡片缩小，需要一个“被覆盖进度”。但卡片被钉住后，<b>它自己的 view 进度已经停滞</b>，不能用自身的时间线。解决办法是借用“下一张卡”的位置：下一张卡从下方滑到钉住位置的最后 340px，就是上一张被覆盖的过程。</p>
+      <div class="code2">
+        <figure class="js"><figcaption>JS 实现</figcaption><pre><span class="c">// 叠卡：直接读“下一张卡”的位置</span>
+items.forEach((it, i) =&gt; {
+  <span class="k">if</span> (i === items.length - 1) <span class="k">return</span>;
+  <span class="k">const</span> nr = items[i + 1].getBoundingClientRect();
+  <span class="k">const</span> stuckTop = <span class="v">90</span> + (i + <span class="v">1</span>) * <span class="v">26</span>;
+  <span class="k">const</span> c = clamp(<span class="v">1</span> - (nr.top - stuckTop) / <span class="v">340</span>);
+  it.style.scale  = <span class="v">1</span> - <span class="v">.08</span> * c;
+  it.style.filter = <span class="s">`brightness(${1 - .45 * c})`</span>;
+});
+
+<span class="c">// scrollytelling：IO 监听文案是否经过屏幕中线</span>
+<span class="k">new</span> IntersectionObserver(es =&gt; es.forEach(e =&gt; {
+  e.target.classList.toggle(<span class="s">'on'</span>, e.isIntersecting);
+  <span class="k">if</span> (e.isIntersecting)
+    shape.className = <span class="s">'shape s'</span> + steps.indexOf(e.target);
+}), { rootMargin: <span class="s">'-45% 0px -45% 0px'</span> });</pre></figure>
+        <figure class="css"><figcaption>CSS 实现</figcaption><pre><span class="c">/* 叠卡：时间线跨兄弟共享，需要 timeline-scope */</span>
+.stack{ timeline-scope: <span class="v">--c1, --c2, --c3</span> }
+.item:nth-child(2){ view-timeline: <span class="v">--c1</span> block; --tl: --c2 }
+.item:nth-child(1){ --tl: --c1 }
+.item:not(:last-child){
+  animation: shrink linear both;
+  animation-timeline: var(--tl);        <span class="c">/* 用“下一张”的时间线 */</span>
+  animation-range:
+    cover calc(100vh - 340px - 90px - (var(--i) + 1) * 26px)
+    cover calc(100vh - 90px - (var(--i) + 1) * 26px);
+}
+<span class="k">@keyframes</span> shrink{ to{ scale:.92; filter:brightness(.55) } }
+
+<span class="c">/* scrollytelling：整段 sticky 区间共用一条时间线 */</span>
+.story{ view-timeline: --st block }
+.shape{ animation: morph linear both;
+        animation-timeline: --st;
+        animation-range: cover 100vh cover calc(100% - 100vh) }
+<span class="k">@keyframes</span> morph{
+  0%,20%  { background-color:#16a34a; border-radius:50% }
+  30%,45% { background-color:#0284c7; border-radius:28% }
+  <span class="c">/* … */</span>
+}</pre></figure>
+      </div>
+      <div class="note">对比：IntersectionObserver 版是“跨过阈值就切换 class”，变化是<b>离散</b>的，由 transition 补间；CSS 时间线版是<b>连续</b>的，随滚动细腻变化、可倒放。叠卡的 range 用 <code>340px / 26px</code> 这类数值手工估算，卡片高度或 top 改了就要同步改，这是 CSS 方案目前最大的维护成本。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 5. Scroll Snap ========== -->
+<section class="block" id="snap">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="tag">05 · Scroll Snap</span><span class="modebadge"></span>
+      <h2>滚动吸附 + 容器内联动</h2>
+      <p class="lead">吸附本身是纯 CSS，两种模式<b>完全相同</b>。切换开关改变的是“容器内内容的联动动画”：面板内容浮现、卡片居中放大。</p>
+    </div>
+
+    <div class="snap-box">
+      <section><div><h3>Panel 1</h3><p>在此框内滚动</p></div></section>
+      <section><div><h3>Panel 2</h3><p>y mandatory</p></div></section>
+      <section><div><h3>Panel 3</h3><p>内容随进入而浮现</p></div></section>
+      <section><div><h3>Panel 4</h3><p>scroll-snap-stop: always</p></div></section>
+    </div>
+    <p class="snap-note">↑ 垂直吸附，面板内容随进入浮现。↓ 横向吸附，居中的卡片最大，两侧缩小变淡。</p>
+  </div>
+  <div class="wrap">
+    <div class="hsnap">
+      <div class="slide" style="background:linear-gradient(160deg,#6d28d9,#c084fc)"><span>1</span>卡片一<small>居中放大</small></div>
+      <div class="slide" style="background:linear-gradient(160deg,#0e7490,#67e8f9)"><span>2</span>卡片二<small>左右滑动</small></div>
+      <div class="slide" style="background:linear-gradient(160deg,#be185d,#fda4af)"><span>3</span>卡片三<small>scroll-snap-align: center</small></div>
+      <div class="slide" style="background:linear-gradient(160deg,#b45309,#fde68a)"><span>4</span>卡片四<small>无 JS 吸附</small></div>
+      <div class="slide" style="background:linear-gradient(160deg,#047857,#6ee7b7)"><span>5</span>卡片五<small>适合轮播</small></div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="explain">
+      <h3>原理与实现：Scroll Snap</h3>
+      <h4>吸附是怎么工作的</h4>
+      <ul>
+        <li><b>容器</b>：<code>scroll-snap-type: y mandatory</code>。轴向 + 严格度，<code>mandatory</code> 滚动结束必定停在某个吸附点，<code>proximity</code> 只在靠近时才吸附。</li>
+        <li><b>子项</b>：<code>scroll-snap-align: start | center | end</code> 声明吸附点；<code>scroll-snap-stop: always</code> 禁止一次滑动越过多个面板。</li>
+        <li>用 <code>scroll-padding</code> / <code>scroll-margin</code> 调整对齐偏移（比如让出固定导航栏）。</li>
+        <li>吸附由浏览器的滚动系统完成，通常无需 JS，触摸惯性与键盘操作自动适配。较新的 Chrome 还提供 <code>scrollsnapchange</code> 事件，用来在吸附到新面板时更新状态。</li>
+      </ul>
+      <h4>与动画结合：scroller 是谁</h4>
+      <p><code>view()</code> 默认以<b>最近的祖先滚动容器</b>作为 scroller，所以放在 <code>.snap-box</code> 里的元素，它的进度就是“在这个盒子里滚动到哪了”，不是整页。横向轴用 <code>view(inline)</code>。JS 版则需要监听容器自己的 <code>scroll</code> 事件，并相对容器边界来算进度。</p>
+      <div class="code2">
+        <figure class="js"><figcaption>JS 实现</figcaption><pre><span class="c">// 横向轮播：以容器为参照，算每张卡的 cover 进度</span>
+hsnap.addEventListener(<span class="s">'scroll'</span>, () =&gt; {
+  <span class="k">const</span> br = hsnap.getBoundingClientRect();
+  slides.forEach(s =&gt; {
+    <span class="k">const</span> r = s.getBoundingClientRect();
+    <span class="k">const</span> c = (br.right - r.left) / (br.width + r.width);
+    <span class="k">const</span> tri = <span class="v">1</span> - Math.abs(<span class="v">2</span> * c - <span class="v">1</span>);   <span class="c">// 居中 = 1</span>
+    s.style.scale   = <span class="v">.82</span> + <span class="v">.18</span> * tri;
+    s.style.opacity = <span class="v">.45</span> + <span class="v">.55</span> * tri;
+  });
+}, { passive: <span class="k">true</span> });</pre></figure>
+        <figure class="css"><figcaption>CSS 实现</figcaption><pre><span class="c">/* 吸附（两种模式共用） */</span>
+.hsnap{ overflow-x: auto; scroll-snap-type: x mandatory }
+.slide{ scroll-snap-align: center }
+
+<span class="c">/* 联动：以最近滚动容器的横轴为时间线 */</span>
+.slide{
+  animation: slide-pop linear both;
+  animation-timeline: <span class="v">view(inline)</span>;
+}
+<span class="k">@keyframes</span> slide-pop{
+  0%,100%{ scale:.82; opacity:.45 }
+  50%    { scale:1;   opacity:1 }
+}
+
+<span class="c">/* 垂直面板内容浮现 */</span>
+.snap-box section&gt;div{
+  animation: snap-in linear both;
+  animation-timeline: view();
+  animation-range: entry 10% cover 50%;
+}</pre></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 6. 横向滚动 ========== -->
+<section class="hs" id="horizontal">
+  <div class="pin">
+    <div class="track">
+      <div class="intro">
+        <span class="tag">06 · Horizontal</span><span class="modebadge"></span>
+        <h2>竖着滚，<br>横着走 →</h2>
+        <p class="lead">外层很高，内层 sticky 固定，竖向滚动距离被映射为横向位移。</p>
+      </div>
+      <div class="panel"><div class="n">01</div><div><h3>外层加高</h3><p>高度决定横向滚动持续多久。</p></div></div>
+      <div class="panel"><div class="n">02</div><div><h3>内层 sticky</h3><p>position: sticky; top: 0; height: 100vh。</p></div></div>
+      <div class="panel"><div class="n">03</div><div><h3>计算进度</h3><p>已滚动 / (外层高度 − 视口高度)。</p></div></div>
+      <div class="panel"><div class="n">04</div><div><h3>平移轨道</h3><p>JS：写 translateX；CSS：关键帧。</p></div></div>
+      <div class="panel"><div class="n">05</div><div><h3>完成</h3><p>走到末尾，页面继续向下。</p></div></div>
+    </div>
+    <div class="hbar"><i></i></div>
+  </div>
+</section>
+<div class="wrap hs-after">
+  <div class="explain" style="margin-top:0">
+    <h3>原理与实现：横向滚动</h3>
+    <h4>三个要素</h4>
+    <ol>
+      <li><b>跑道</b>：外层 <code>.hs</code> 的高度 = 轨道需要平移的距离 + 一屏高度。</li>
+      <li><b>舞台</b>：内层 <code>.pin</code> 是 <code>sticky; top:0; height:100vh; overflow:hidden</code>。</li>
+      <li><b>映射</b>：进度 p（钉住阶段 0→1）→ <code>translateX(−p × (轨道宽 − 视口宽))</code>。</li>
+    </ol>
+    <div class="code2">
+      <figure class="js"><figcaption>JS 实现</figcaption><pre><span class="c">// 测量：轨道总宽 − 视口宽 = 需要平移的距离</span>
+<span class="k">function</span> measure(){
+  dist = Math.max(<span class="v">0</span>, track.scrollWidth - innerWidth);
+  hs.style.height = (dist + innerHeight) + <span class="s">'px'</span>;   <span class="c">// 1px 滚动 = 1px 平移</span>
+}
+<span class="k">function</span> update(){
+  <span class="k">const</span> r = hs.getBoundingClientRect();
+  <span class="k">const</span> p = clamp(-r.top / (r.height - innerHeight));
+  track.style.transform = <span class="s">`translate3d(${-p * dist}px,0,0)`</span>;
+  bar.style.transform   = <span class="s">`scaleX(${p})`</span>;
+}
+addEventListener(<span class="s">'resize'</span>, measure);   <span class="c">// 内容变化 / 窗口变化都要重测</span></pre></figure>
+      <figure class="css"><figcaption>CSS 实现</figcaption><pre>.hs{ height: <span class="v">520vh</span>; view-timeline: <span class="v">--hs</span> block }
+.pin{ position: sticky; top: 0; height: 100vh; overflow: hidden }
+.track{ width: max-content;
+  animation: hmove linear both;
+  animation-timeline: --hs;
+  animation-range: cover 100vh cover calc(100% - 100vh);
+}
+<span class="c">/* translate 的百分比取“元素自身宽度”，无需测量 */</span>
+<span class="k">@keyframes</span> hmove{
+  to{ translate: <span class="v">calc(-100% + 100vw)</span> 0 }
+}
+.hbar i{ animation: grow-x linear both;
+         animation-timeline: --hs;
+         animation-range: cover 100vh cover calc(100% - 100vh) }</pre></figure>
+    </div>
+    <div class="note">差异：JS 版的外层高度由内容宽度精确算出，竖向滚 1px 就横移 1px；CSS 版高度写死（520vh），不依赖测量、也不会因内容变化出错，但内容变宽/变窄时，横向移动的“速度”会随之变化，需要手动调高度。</div>
+  </div>
+</div>
+
+<!-- ========== 总结 ========== -->
+<section class="block" id="summary">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="tag">07 · 总结</span>
+      <h2>怎么选？</h2>
+      <p class="lead">不是“CSS 取代 JS”，而是各管一段：连续的滚动映射交给 CSS，离散的触发与复杂逻辑留给 JS，并做好渐进增强。</p>
+    </div>
+
+    <div class="compare">
+      <div><span>维度</span><span><span class="pill js">JS</span></span><span><span class="pill css">CSS animation-timeline</span></span></div>
+      <div><b>主线程依赖</b><span class="y">每次滚动都要跑回调，繁忙时掉帧</span><span class="g">可合成属性在合成器线程运行，不受主线程阻塞</span></div>
+      <div><b>与滚动同步</b><span class="y">回调晚于滚动，快速滚动会滞后/漂移</span><span class="g">由滚动线程驱动，同帧同步</span></div>
+      <div><b>灵活性</b><span class="g">任意逻辑、状态、联动 Canvas / WebGL</span><span class="y">只有“进度 → 样式”的连续映射</span></div>
+      <div><b>一次性触发</b><span class="g">IntersectionObserver，简单可靠</span><span class="y">不适合；入场是可倒放的“拖动”</span></div>
+      <div><b>浏览器支持</b><span class="g">几乎所有浏览器</span><span class="y">Chrome / Edge 115+、Safari 26+；Firefox 稳定版仍需实验开关（以 MDN / caniuse 最新数据为准）</span></div>
+      <div><b>代码量 / 维护</b><span class="y">要写监听、测量、节流、清理</span><span class="y">声明式更短，但 range 有时需手工估算长度</span></div>
+      <div><b>调试</b><span class="g">断点、console，直观</span><span class="y">需用 DevTools 的 Animations 面板观察时间线</span></div>
+    </div>
+
+    <div class="decide">
+      <div class="card"><h3>✅ 优先用 CSS 的场景</h3><p>阅读进度条、元素随滚动渐变 / 位移、视差、sticky 区域内的联动、横向滚动。这些都是“进度 → 样式”的映射。</p></div>
+      <div class="card"><h3>✅ 仍用 JS 的场景</h3><p>一次性入场、计数、懒加载、需要判断与状态的逻辑、联动 Canvas / WebGL / 视频帧序列、需要兼容旧浏览器。</p></div>
+      <div class="card"><h3>✅ 混合 / 渐进增强</h3><p>先写好无动画也完整可读的页面；支持时交给 CSS，不支持时回退到 JS 或直接静态显示。</p></div>
+    </div>
+
+    <div class="explain" style="margin-top:44px">
+      <h3>落地模板：渐进增强 + 无障碍</h3>
+      <div class="code2">
+        <figure><figcaption>CSS：特性检测 + 减少动态效果</figcaption><pre><span class="c">/* 默认：内容完整可见，没有任何动画 */</span>
+.card{ opacity:1 }
+
+<span class="k">@supports</span> (animation-timeline: view()) {
+  <span class="k">@media</span> (prefers-reduced-motion: no-preference) {
+    .card{
+      animation: fade-up linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+    <span class="k">@keyframes</span> fade-up{
+      from{ opacity:0; translate:0 40px }
+    }
+  }
+}</pre></figure>
+        <figure><figcaption>JS：不支持时回退</figcaption><pre><span class="k">const</span> native = CSS.supports(<span class="s">'animation-timeline: view()'</span>);
+<span class="k">const</span> calm   = matchMedia(<span class="s">'(prefers-reduced-motion: reduce)'</span>).matches;
+
+<span class="k">if</span> (!native &amp;&amp; !calm) {
+  <span class="c">// 回退：IntersectionObserver + class</span>
+  <span class="k">const</span> io = <span class="k">new</span> IntersectionObserver(es =&gt; es.forEach(e =&gt; {
+    <span class="k">if</span> (e.isIntersecting) {
+      e.target.classList.add(<span class="s">'in'</span>);
+      io.unobserve(e.target);
+    }
+  }));
+  document.querySelectorAll(<span class="s">'.card'</span>).forEach(el =&gt; io.observe(el));
+}</pre></figure>
+      </div>
+      <h4>实战清单</h4>
+      <ol>
+        <li>只对 <code>transform / translate / scale / rotate / opacity</code> 做动画，避免触发布局（宽高、top / left）。</li>
+        <li><code>animation</code> 简写之后再写 <code>animation-timeline</code>；注意 <code>animation-range</code> 的长度写法需与布局保持一致。</li>
+        <li>JS 路线：<code>passive</code> 监听 + <code>requestAnimationFrame</code> 合并；先批量读布局再批量写样式；不用时记得 <code>disconnect</code> / <code>removeEventListener</code>。</li>
+        <li>尊重 <code>prefers-reduced-motion</code>；动画只做增强，不承载关键信息。</li>
+        <li>调试 CSS 时间线：Chrome DevTools 的 Animations 面板与 Elements 里的 <code>animation-timeline</code> 计算样式。</li>
+        <li>用本页的“🔥 主线程压力”做自测：同样的效果，在你的页面里换成哪种实现，在低端设备上更稳。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<footer>本页的动画切换逻辑是唯一的 JavaScript；CSS 模式下，滚动动画本身不使用任何脚本。</footer>
+
+<script>
+(() => {
+  'use strict';
+  const $  = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp  = (a, b, t) => a + (b - a) * t;
+  const root  = document.documentElement;
+  const cssOK = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: view()'));
+  const calm  = matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- 状态 ---------- */
+  let mode = 'js', ticking = false, callbacks = 0, frames = 0, token = 0;
+  let io = null, stepIO = null, hDist = 0, plx = [];
+
+  /* ---------- JS 写过的 inline 样式登记表：切换模式时一键清除 ---------- */
+  const touched = new Map();
+  const kebab = p => p.startsWith('--') ? p : p.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+  function put(el, prop, val) {
+    if (prop.startsWith('--')) el.style.setProperty(prop, val); else el.style[prop] = val;
+    let set = touched.get(el); if (!set) touched.set(el, set = new Set()); set.add(prop);
+  }
+  function clearInline() {
+    touched.forEach((props, el) => props.forEach(p => el.style.removeProperty(kebab(p))));
+    touched.clear();
+  }
+
+  /* ---------- 元素 ---------- */
+  const bar = $('#bar'), linked = $('#linked'), orb = $('.orb'), meter = $('.meter i'),
+        word = $('.bigword'), draw = $('.path path'), readout = $('.readout'),
+        para = $('#parallax'), plxEls = $$('.para .layer, .para .float, .para .text'),
+        items = $$('.stack .item'), shape = $('.shape'), steps = $$('.steps>div'),
+        sweep = $('.sweep'), hs = $('#horizontal'), track = $('.hs .track'), hbar = $('.hbar i'),
+        snapBox = $('.snap-box'), hsnap = $('.hsnap'), nums = $$('.num');
+
+  /* ---------- 通用：进度计算 ---------- */
+  const stickyP = el => {                       // 外层很高 + 内层 sticky 时的“钉住阶段”进度
+    const r = el.getBoundingClientRect(), d = r.height - innerHeight;
+    return d > 0 ? clamp(-r.top / d) : 0;
+  };
+  const coverP = r => clamp((innerHeight - r.top) / (innerHeight + r.height)); // 等价 view() 的 cover 进度
+
+  /* ====================== JS 模式的各个更新函数 ====================== */
+  function updGlobal() {
+    const max = root.scrollHeight - innerHeight;
+    put(bar, 'transform', `scaleX(${max > 0 ? scrollY / max : 0})`);
+    $('#hy').textContent = Math.round(scrollY);
+  }
+  function updLinked() {
+    const p = stickyP(linked);
+    put(orb, 'scale', p < .5 ? lerp(.35, 1.25, p * 2) : lerp(1.25, .5, (p - .5) * 2));
+    put(orb, 'rotate', p * 540 + 'deg');
+    put(orb, 'filter', `hue-rotate(${p * 300}deg)`);
+    put(meter, 'transform', `scaleY(${p})`);
+    put(word, 'letterSpacing', lerp(-.05, .25, p) + 'em');
+    put(word, 'translate', `0 ${lerp(-30, 30, p)}px`);
+    put(word, 'scale', lerp(.8, 1.1, p));
+    put(draw, 'strokeDashoffset', 1 - p);
+    put(readout, '--p', Math.round(p * 100));
+  }
+  function measurePlx() {
+    plx = plxEls.map(el => ({ el, s: parseFloat(getComputedStyle(el).getPropertyValue('--s')) || 0 }));
+  }
+  function updParallax() {
+    const r = para.getBoundingClientRect();
+    if (r.bottom < -300 || r.top > innerHeight + 300) return;
+    const t = coverP(r);
+    plx.forEach(({ el, s }) => put(el, 'translate', `0 ${lerp(-s, s, t).toFixed(1)}px`));
+  }
+  function updStack() {
+    items.forEach((it, i) => {
+      if (i === items.length - 1) return;
+      const nr = items[i + 1].getBoundingClientRect();
+      const stuckTop = 90 + (i + 1) * 26;
+      const c = clamp(1 - (nr.top - stuckTop) / 340);
+      put(it, 'scale', 1 - .08 * c);
+      put(it, 'filter', `brightness(${1 - .45 * c})`);
+    });
+  }
+  function updSweep() {
+    const r = sweep.getBoundingClientRect();
+    const c = coverP(r), c0 = .3 * r.height / (innerHeight + r.height);
+    put(sweep, 'backgroundSize', `${clamp((c - c0) / (.55 - c0)) * 100}% 100%, 100% 100%`);
+  }
+  function measureH() {
+    hDist = Math.max(0, track.scrollWidth - innerWidth);
+    put(hs, 'height', (hDist + innerHeight) + 'px');
+  }
+  function updH() {
+    const p = stickyP(hs);
+    put(track, 'transform', `translate3d(${-p * hDist}px,0,0)`);
+    put(hbar, 'transform', `scaleX(${p})`);
+  }
+  function frame() {
+    ticking = false; frames; callbacks++;
+    updGlobal(); updH();
+    if (!calm.matches) { updLinked(); updParallax(); updStack(); updSweep(); }
+  }
+  const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(frame); } };
+  const onResize = () => { measureH(); measurePlx(); onScroll(); };
+
+  function onSnapV() {
+    callbacks++;
+    const br = snapBox.getBoundingClientRect();
+    $$('section>div', snapBox).forEach(d => {
+      const s = d.parentElement.getBoundingClientRect();
+      const c = (br.bottom - s.top) / (br.height + s.height);
+      const t = clamp((c - .05) / .45);
+      put(d, 'opacity', t); put(d, 'translate', `0 ${(1 - t) * 60}px`); put(d, 'scale', .8 + .2 * t);
+    });
+  }
+  function onSnapH() {
+    callbacks++;
+    const br = hsnap.getBoundingClientRect();
+    $$('.slide', hsnap).forEach(s => {
+      const r = s.getBoundingClientRect();
+      const c = (br.right - r.left) / (br.width + r.width);
+      const tri = 1 - Math.abs(2 * c - 1);
+      put(s, 'scale', .82 + .18 * tri); put(s, 'opacity', .45 + .55 * tri);
+    });
+  }
+
+  /* ---------- 触发式：IntersectionObserver + 数字滚动 ---------- */
+  function countUp(num) {
+    const to = parseFloat(num.style.getPropertyValue('--to')), my = token, t0 = performance.now();
+    const tick = now => {
+      if (my !== token) return;
+      const t = clamp((now - t0) / 1600);
+      put(num, '--n', Math.round(to * (1 - Math.pow(1 - t, 4))));
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  function setupTriggered() {
+    if (calm.matches) { $$('.rv').forEach(e => e.classList.add('in')); return; }
+    nums.forEach(n => put(n, '--n', 0));
+    io = new IntersectionObserver(es => es.forEach(e => {
+      if (!e.isIntersecting) return;
+      callbacks++;
+      e.target.classList.add('in'); io.unobserve(e.target);
+      if (e.target.classList.contains('stat')) countUp($('.num', e.target));
+    }), { threshold: .18, rootMargin: '0px 0px -6% 0px' });
+    $$('.rv').forEach(el => io.observe(el));
+  }
+  function setupSteps() {
+    stepIO = new IntersectionObserver(es => es.forEach(e => {
+      e.target.classList.toggle('on', e.isIntersecting);
+      if (e.isIntersecting) { callbacks++; shape.className = 'shape s' + steps.indexOf(e.target); }
+    }), { rootMargin: '-45% 0px -45% 0px' });
+    steps.forEach(s => stepIO.observe(s));
+  }
+
+  /* ====================== 模式装配 / 拆除 ====================== */
+  function setupJs() {
+    addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('resize', onResize);
+    snapBox.addEventListener('scroll', onSnapV, { passive: true });
+    hsnap.addEventListener('scroll', onSnapH, { passive: true });
+    setupTriggered(); setupSteps();
+    measureH(); measurePlx(); frame();
+    if (!calm.matches) { onSnapV(); onSnapH(); }
+  }
+  function teardownJs() {
+    removeEventListener('scroll', onScroll);
+    removeEventListener('resize', onResize);
+    snapBox.removeEventListener('scroll', onSnapV);
+    hsnap.removeEventListener('scroll', onSnapH);
+    if (io) io.disconnect(); if (stepIO) stepIO.disconnect();
+    io = stepIO = null; token++; ticking = false;
+    clearInline();
+    $$('.rv.in').forEach(e => e.classList.remove('in'));
+    steps.forEach(s => s.classList.remove('on'));
+    shape.className = 'shape';
+  }
+
+  function setMode(next) {
+    if (next === mode) return;
+    if (next === 'css' && !cssOK) return;
+    // 记录位置：横向区高度在两种模式下不同，切换后要保持“看到的位置”不跳
+    const r = hs.getBoundingClientRect(), pinned = r.top <= 0 && r.bottom >= innerHeight;
+    const below = r.bottom < innerHeight, p = stickyP(hs), gap = root.scrollHeight - scrollY;
+
+    teardownJs();
+    mode = next; root.dataset.mode = next;
+    $$('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.m === next)));
+    if (next === 'js') setupJs();
+    $('#hMode').textContent = next.toUpperCase();
+    $('#hMode').className = next;
+    if (next === 'css') $('#hy').textContent = '—';
+
+    if (pinned) {
+      const top = hs.getBoundingClientRect().top + scrollY;
+      scrollTo({ top: top + p * (hs.offsetHeight - innerHeight), behavior: 'instant' });
+    } else if (below) {
+      scrollTo({ top: root.scrollHeight - gap, behavior: 'instant' });
+    }
+  }
+
+  /* ---------- UI ---------- */
+  $$('.seg button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
+  if (!cssOK) { $('.seg button[data-m=css]').disabled = true; $('#nosup').style.display = 'block'; }
+
+  /* 压力测试：周期性阻塞主线程 */
+  let stressTimer = null;
+  $('#stress').addEventListener('click', e => {
+    const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+    e.currentTarget.setAttribute('aria-pressed', String(on));
+    e.currentTarget.textContent = on ? '🔥 压力中…点此关闭' : '🔥 主线程压力';
+    if (on) stressTimer = setInterval(() => { const t = performance.now(); while (performance.now() - t < 45) {} }, 60);
+    else { clearInterval(stressTimer); stressTimer = null; }
+  });
+
+  /* HUD：FPS 与 JS 滚动回调速率 */
+  (function fpsLoop() { frames++; requestAnimationFrame(fpsLoop); })();
+  setInterval(() => {
+    $('#hCb').textContent = callbacks * 2;
+    $('#hFps').textContent = Math.min(144, frames * 2);
+    callbacks = 0; frames = 0;
+  }, 500);
+
+  setupJs();
+})();
+</script>
+</body>
+</html>
