@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>前端跨标签页通信方案演示</title>
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--text:#1d2129;--sub:#6b7280;--line:#e5e7eb;
+  --pri:#4f46e5;--ok:#16a34a;--warn:#d97706;--err:#dc2626;--code:#f3f4f6;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#111318;--card:#1a1d24;--text:#e6e8ec;--sub:#9aa3b2;--line:#2a2f3a;--code:#12151b;--pri:#818cf8}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:16px;margin:28px 0 10px}
+.sub{color:var(--sub);margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
+.chip{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;background:var(--code);color:var(--sub);border:1px solid var(--line)}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:6px 14px}
+button:hover{border-color:var(--pri)}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+input[type=text]{flex:1;min-width:200px;font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.env{font-size:12px;color:var(--sub);margin-top:8px}
+.warn{margin-top:8px;padding:8px 12px;border-radius:8px;background:rgba(217,119,6,.12);color:var(--warn);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.m h3{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.m h3 label{font-weight:400;font-size:12px;color:var(--sub);cursor:pointer;display:flex;gap:4px;align-items:center}
+.m p{margin:4px 0;color:var(--sub);font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--sub);margin-right:6px}
+.dot.ok{background:var(--ok)}.dot.err{background:var(--err)}.dot.wait{background:var(--warn)}
+.status{font-size:12px;margin:6px 0}
+details{margin-top:6px}
+summary{cursor:pointer;color:var(--pri);font-size:13px}
+pre{margin:6px 0 0;padding:10px;background:var(--code);border-radius:8px;overflow:auto;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre}
+#log{height:300px;overflow:auto;padding:8px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.row{display:flex;gap:8px;align-items:baseline;padding:2px 4px;border-radius:4px;flex-wrap:wrap}
+.row .t{color:var(--sub);font-size:12px}
+.row.in{background:rgba(22,163,74,.08)}
+.row.out{background:rgba(79,70,229,.08)}
+.row.sys{color:var(--sub)}
+.mtag{font-size:11px;padding:0 6px;border-radius:4px;border:1px solid var(--line);color:var(--sub)}
+.lat{font-size:11px;color:var(--sub)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--sub);font-weight:600;white-space:nowrap}
+.tw{overflow:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>前端跨标签页通信方案演示</h1>
+  <p class="sub">用法：在浏览器里打开本文件，点「新开标签页」（或手动再开几个同样的标签页），在任一标签页发送消息，其他标签页会通过各方案收到并标注延迟。</p>
+
+  <div class="card">
+    <div class="bar">
+      <span class="badge" id="me"></span>
+      <span>在线标签页：</span><span id="peersOnline" class="bar"></span>
+      <span style="flex:1"></span>
+      <span id="leaderBadge" class="chip"></span>
+      <button id="openTab">新开标签页</button>
+    </div>
+    <div class="env" id="env"></div>
+    <div id="fileWarn"></div>
+  </div>
+
+  <h2>发送消息</h2>
+  <div class="card">
+    <div class="bar">
+      <input type="text" id="text" placeholder="输入消息，回车发送" value="Hello from another tab 👋">
+      <button class="pri" id="send">发送（所选方案同时发送）</button>
+    </div>
+    <div class="env">每个方案卡片右上角的复选框决定是否参与发送。接收端始终监听全部方案，所以同一条消息可能按方案多次出现，方便对比延迟。</div>
+  </div>
+
+  <h2>通信方案</h2>
+  <div class="grid" id="cards"></div>
+
+  <h2>消息日志</h2>
+  <div class="card" style="padding:0">
+    <div class="bar" style="padding:8px 12px;border-bottom:1px solid var(--line)">
+      <span class="sub" style="margin:0">绿色＝收到，紫色＝发出，灰色＝系统信息</span>
+      <span style="flex:1"></span>
+      <button id="clear">清空日志</button>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <h2>附加：Web Locks 主标签页选举</h2>
+  <div class="card">
+    <p class="sub" style="margin:0 0 8px">跨标签页场景里常见需求是「只让一个标签页维护 WebSocket / 定时任务」。Web Locks 持有锁的标签页即为主标签页，关闭后锁自动释放，下一个标签页接任。</p>
+    <div id="locksInfo" class="env"></div>
+  </div>
+
+  <h2>方案对比</h2>
+  <div class="card tw">
+    <table>
+      <thead><tr><th>方案</th><th>原理</th><th>范围</th><th>实时性</th><th>需持有窗口引用</th><th>适用场景</th></tr></thead>
+      <tbody>
+        <tr><td>BroadcastChannel</td><td>同名频道广播</td><td>同源</td><td>即时</td><td>否</td><td>现代浏览器首选，简单直接</td></tr>
+        <tr><td>localStorage + storage 事件</td><td>写入触发其他标签页的事件</td><td>同源</td><td>即时</td><td>否</td><td>需兼容老浏览器；登录态同步；只能传字符串；当前标签页自己不触发</td></tr>
+        <tr><td>SharedWorker</td><td>多个页面连接同一个后台线程</td><td>同源</td><td>即时</td><td>否</td><td>共享连接、共享状态（如统一管理一个 WebSocket）；需要独立 worker 脚本</td></tr>
+        <tr><td>window.postMessage</td><td>通过 window 引用定向发消息</td><td>可跨源</td><td>即时</td><td>是（opener / window.open 返回值 / iframe）</td><td>弹窗与父页面、跨域 iframe</td></tr>
+        <tr><td>IndexedDB 轮询</td><td>写入数据库，其他标签页定时读取</td><td>同源</td><td>取决于轮询间隔</td><td>否</td><td>消息量大或需要持久化、可回溯</td></tr>
+        <tr><td>Cookie 轮询</td><td>写 cookie，其他标签页定时读取</td><td>同站</td><td>取决于轮询间隔</td><td>否</td><td>古老方案，不推荐；约 4KB 限制，且每次请求都会带上</td></tr>
+        <tr><td>Service Worker（未内置演示）</td><td>页面与 SW 之间 postMessage / Clients API</td><td>同源</td><td>即时</td><td>否</td><td>需要独立脚本且 HTTPS（或 localhost），适合离线/推送等场景</td></tr>
+        <tr><td>WebSocket / 服务端中转（未内置演示）</td><td>经服务器转发</td><td>可跨设备</td><td>网络延迟</td><td>否</td><td>跨设备、跨浏览器同步</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- 基础 ---------- */
+const $ = s => document.querySelector(s);
+const TAB_ID = Math.random().toString(36).slice(2, 6).toUpperCase();
+const COLOR = 'hsl(' + Math.floor(Math.random() * 360) + ' 65% 45%)';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const mk = text => ({ id: uid(), from: TAB_ID, color: COLOR, text, ts: Date.now() });
+
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+const me = $('#me');
+me.textContent = '本标签页 #' + TAB_ID;
+me.style.background = COLOR;
+document.title = '#' + TAB_ID + ' · 跨标签页通信演示';
+
+$('#env').textContent = '协议：' + location.protocol + '　|　origin：' + location.origin + '　|　安全上下文：' + window.isSecureContext;
+if (location.protocol === 'file:') {
+  const w = el('div', 'warn', '当前通过 file:// 打开：部分方案（Cookie、SharedWorker、Web Locks）在不同浏览器下可能不可用。想完整体验，请在文件所在目录运行 python3 -m http.server 8000，再访问 http://localhost:8000/ 。');
+  $('#fileWarn').appendChild(w);
+}
+
+/* ---------- 日志 ---------- */
+const logEl = $('#log');
+function log(kind, method, text, from, color, latency){
+  const row = el('div', 'row ' + kind);
+  const d = new Date();
+  row.appendChild(el('span', 't', d.toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0')));
+  if (kind === 'in') row.appendChild(el('span', '', '←'));
+  if (kind === 'out') row.appendChild(el('span', '', '→'));
+  if (method) row.appendChild(el('span', 'mtag', method));
+  if (from) {
+    const b = el('span', 'badge', '#' + from);
+    b.style.background = color || '#888';
+    row.appendChild(b);
+  }
+  row.appendChild(el('span', '', text));
+  if (latency != null) row.appendChild(el('span', 'lat', '(' + latency + ' ms)'));
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+$('#clear').onclick = () => { logEl.textContent = ''; };
+
+/* ---------- 方案定义 ---------- */
+const methods = [];
+
+/* 1. BroadcastChannel */
+methods.push({
+  key: 'bc', name: 'BroadcastChannel', tag: '同源 · 即时',
+  desc: '同源页面订阅同名频道，任意一方 postMessage，其他所有订阅者都会收到（发送者自己不会收到）。可传结构化克隆数据，不限于字符串。',
+  supported: () => 'BroadcastChannel' in window,
+  init(onMsg){
+    this.ch = new BroadcastChannel('demo-channel');
+    this.ch.onmessage = e => onMsg(e.data);
+  },
+  send(p){ this.ch.postMessage(p); },
+  code:
+`const ch = new BroadcastChannel('demo-channel');
+
+// 接收
+ch.onmessage = (e) => console.log(e.data);
+
+// 发送（自己不会收到）
+ch.postMessage({ text: 'hello' });
+
+// 不用时关闭
+ch.close();`
+});
+
+/* 2. localStorage + storage */
+methods.push({
+  key: 'ls', name: 'localStorage', tag: '同源 · 即时',
+  desc: '一个标签页修改 localStorage，其他同源标签页会触发 storage 事件。注意：当前标签页自己不会触发；写入相同值也不会触发，所以消息要带唯一 id 或时间戳。',
+  supported: () => { try { return 'localStorage' in window && !!window.localStorage; } catch (e) { return false; } },
+  init(onMsg){
+    addEventListener('storage', e => {
+      if (e.key === 'demo:msg' && e.newValue) {
+        try { onMsg(JSON.parse(e.newValue)); } catch (err) {}
+      }
+    });
+  },
+  send(p){ localStorage.setItem('demo:msg', JSON.stringify(p)); },
+  code:
+`// 接收
+window.addEventListener('storage', (e) => {
+  if (e.key === 'demo:msg' && e.newValue) {
+    console.log(JSON.parse(e.newValue));
+  }
+});
+
+// 发送（消息里带 id/时间戳，保证值每次不同）
+localStorage.setItem('demo:msg',
+  JSON.stringify({ id: Date.now(), text: 'hello' }));`
+});
+
+/* 3. SharedWorker */
+const WORKER_SRC =
+'const ports = new Set();\n' +
+'onconnect = (e) => {\n' +
+'  const port = e.ports[0];\n' +
+'  ports.add(port);\n' +
+'  port.onmessage = (ev) => {\n' +
+'    if (ev.data && ev.data.__bye) { ports.delete(port); return; }\n' +
+'    for (const p of ports) if (p !== port) p.postMessage(ev.data);\n' +
+'  };\n' +
+'  port.start();\n' +
+'};\n';
+
+methods.push({
+  key: 'sw', name: 'SharedWorker', tag: '同源 · 即时',
+  desc: '所有标签页连接同一个后台线程，由它转发消息，还能在其中保存共享状态或唯一的 WebSocket。正式项目请使用独立的 worker.js；本演示为了保持单文件，用 Blob URL 并通过 localStorage 共享其地址，属于取巧做法。',
+  supported: () => 'SharedWorker' in window,
+  init(onMsg, setStatus){
+    const makeUrl = () => {
+      const u = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' }));
+      try { localStorage.setItem('demo:swUrl', u); } catch (e) {}
+      return u;
+    };
+    const connect = (url, canRetry) => {
+      const w = new SharedWorker(url, { name: 'demo-sw' });
+      w.onerror = () => {
+        if (canRetry) connect(makeUrl(), false);
+        else setStatus('err', '连接失败（file:// 或浏览器限制 Blob 创建 SharedWorker）');
+      };
+      w.port.onmessage = e => onMsg(e.data);
+      w.port.start();
+      this.port = w.port;
+    };
+    let stored = null;
+    try { stored = localStorage.getItem('demo:swUrl'); } catch (e) {}
+    if (stored) connect(stored, true); else connect(makeUrl(), false);
+    addEventListener('beforeunload', () => { try { this.port.postMessage({ __bye: true }); } catch (e) {} });
+  },
+  send(p){ this.port.postMessage(p); },
+  code:
+`// worker.js —— 所有标签页共用一个实例
+const ports = new Set();
+onconnect = (e) => {
+  const port = e.ports[0];
+  ports.add(port);
+  port.onmessage = (ev) => {
+    for (const p of ports) if (p !== port) p.postMessage(ev.data);
+  };
+  port.start();
+};
+
+// 页面里
+const w = new SharedWorker('worker.js', { name: 'demo' });
+w.port.onmessage = (e) => console.log(e.data);
+w.port.start();
+w.port.postMessage({ text: 'hello' });`
+});
+
+/* 4. window.postMessage */
+const pm = {
+  key: 'pm', name: 'window.postMessage', tag: '可跨源 · 需窗口引用',
+  desc: '通过 window 引用定向发送消息，可跨源。本演示：点「新开标签页」打开的窗口会与当前页建立引用关系，有引用的窗口之间可通信，并由先建立引用的一方转发给其他窗口。直接手动打开的标签页没有引用，收不到消息。',
+  peers: new Set(),
+  supported: () => true,
+  TO: location.origin === 'null' ? '*' : location.origin,
+  init(onMsg, setStatus){
+    this.setStatus = setStatus;
+    addEventListener('message', e => {
+      const d = e.data;
+      if (!d || d.__demo !== 'pm') return;
+      if (location.origin !== 'null' && e.origin !== location.origin) return;
+      if (e.source) this.peers.add(e.source);
+      if (d.type === 'msg') {
+        onMsg(d.payload);
+        if (!d.relayed) this.fanout(d, e.source);
+      }
+      this.refresh();
+    });
+    if (window.opener) {
+      this.peers.add(window.opener);
+      try { window.opener.postMessage({ __demo: 'pm', type: 'hello' }, this.TO); } catch (e) {}
+    }
+    setInterval(() => this.refresh(), 1000);
+    this.refresh();
+  },
+  refresh(){
+    for (const w of [...this.peers]) if (w.closed) this.peers.delete(w);
+    this.setStatus('ok', '已持有 ' + this.peers.size + ' 个窗口引用');
+  },
+  fanout(d, except){
+    for (const w of [...this.peers]) {
+      if (w.closed) { this.peers.delete(w); continue; }
+      if (w === except) continue;
+      try { w.postMessage(Object.assign({}, d, { relayed: true }), this.TO); } catch (e) {}
+    }
+  },
+  send(p){ this.fanout({ __demo: 'pm', type: 'msg', payload: p }, null); },
+  code:
+`// 父页面
+const child = window.open('child.html');
+child.postMessage({ text: 'hi child' }, 'https://same.origin');
+
+// 子页面
+opener.postMessage({ text: 'hi parent' }, 'https://same.origin');
+
+// 两边都要监听，并且一定要校验 origin
+window.addEventListener('message', (e) => {
+  if (e.origin !== 'https://same.origin') return;
+  console.log(e.data, e.source);
+});`
+};
+methods.push(pm);
+
+/* 5. IndexedDB 轮询 */
+methods.push({
+  key: 'idb', name: 'IndexedDB 轮询', tag: '同源 · 轮询 300ms',
+  desc: '消息写入 IndexedDB，其他标签页按固定间隔读取新记录。实时性取决于轮询间隔，但数据持久、容量大，适合消息多或需要回溯历史的场景。',
+  supported: () => 'indexedDB' in window,
+  init(onMsg){
+    return new Promise((resolve, reject) => {
+      const rq = indexedDB.open('demo-db', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('msgs', { keyPath: 'seq', autoIncrement: true });
+      rq.onerror = () => reject(rq.error);
+      rq.onsuccess = () => {
+        const db = (this.db = rq.result);
+        let last = 0;
+        const cur = db.transaction('msgs').objectStore('msgs').openCursor(null, 'prev');
+        cur.onsuccess = () => {
+          last = cur.result ? cur.result.key : 0;
+          setInterval(() => {
+            const r = db.transaction('msgs').objectStore('msgs').getAll(IDBKeyRange.lowerBound(last, true));
+            r.onsuccess = () => {
+              for (const m of r.result) { last = Math.max(last, m.seq); onMsg(m); }
+            };
+          }, 300);
+          resolve();
+        };
+      };
+    });
+  },
+  send(p){
+    const st = this.db.transaction('msgs', 'readwrite').objectStore('msgs');
+    const r = st.add(p);
+    r.onsuccess = () => { st.delete(IDBKeyRange.upperBound(r.result - 50)); };
+  },
+  code:
+`// 写入
+store.add({ text: 'hello', ts: Date.now() });
+
+// 其他标签页：记住上次读到的 key，定时读取更新的记录
+setInterval(() => {
+  const req = db.transaction('msgs').objectStore('msgs')
+    .getAll(IDBKeyRange.lowerBound(lastSeq, true));
+  req.onsuccess = () => req.result.forEach(handle);
+}, 300);`
+});
+
+/* 6. Cookie 轮询 */
+const readCookie = () => {
+  const kv = document.cookie.split('; ').find(s => s.indexOf('demo_msg=') === 0);
+  if (!kv) return null;
+  try { return JSON.parse(decodeURIComponent(kv.slice(9))); } catch (e) { return null; }
+};
+methods.push({
+  key: 'ck', name: 'Cookie 轮询', tag: '同站 · 轮询 300ms',
+  desc: '古老的兼容方案：把消息写进 cookie，其他标签页定时读取。受 4KB 限制、每次 HTTP 请求都会带上，不推荐用于新项目。',
+  supported: () => true,
+  init(onMsg){
+    document.cookie = 'demo_t=1; path=/; max-age=5';
+    if (document.cookie.indexOf('demo_t=1') < 0) throw new Error('Cookie 不可用（file:// 下浏览器通常禁用，请用 http://localhost 打开）');
+    const first = readCookie();
+    let lastId = first ? first.id : null;
+    setInterval(() => {
+      const p = readCookie();
+      if (p && p.id !== lastId) { lastId = p.id; onMsg(p); }
+    }, 300);
+  },
+  send(p){
+    document.cookie = 'demo_msg=' + encodeURIComponent(JSON.stringify(p)) + '; path=/; max-age=30';
+  },
+  code:
+`// 发送
+document.cookie = 'msg=' + encodeURIComponent(
+  JSON.stringify({ id: Date.now(), text: 'hello' })) + '; path=/; max-age=30';
+
+// 接收：定时读取，id 变化就视为新消息
+setInterval(() => {
+  const p = readCookie('msg');
+  if (p && p.id !== lastId) { lastId = p.id; handle(p); }
+}, 300);`
+});
+
+/* ---------- 渲染卡片 ---------- */
+const cards = $('#cards');
+methods.forEach(m => {
+  const c = el('div', 'card m');
+  const h = el('h3');
+  const title = el('span', '', m.name);
+  h.appendChild(title);
+  const lab = el('label');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.checked = true;
+  m.enabled = () => cb.checked;
+  lab.appendChild(cb); lab.appendChild(document.createTextNode('参与发送'));
+  h.appendChild(lab);
+  c.appendChild(h);
+  c.appendChild(el('span', 'chip', m.tag));
+  c.appendChild(el('p', '', m.desc));
+  const st = el('div', 'status');
+  const dot = el('span', 'dot wait');
+  const stText = el('span', '', '初始化中…');
+  st.appendChild(dot); st.appendChild(stText);
+  c.appendChild(st);
+  m.setStatus = (state, text) => { dot.className = 'dot ' + state; stText.textContent = text; };
+  const det = el('details');
+  det.appendChild(el('summary', '', '查看核心代码'));
+  det.appendChild(el('pre', '', m.code));
+  c.appendChild(det);
+  cards.appendChild(c);
+});
+
+/* ---------- 接收 / 发送 ---------- */
+function makeReceiver(m){
+  return p => {
+    if (!p || p.from === TAB_ID) return;
+    log('in', m.name, p.text, p.from, p.color, Date.now() - p.ts);
+  };
+}
+
+async function start(){
+  for (const m of methods) {
+    if (!m.supported()) { m.setStatus('err', '当前浏览器不支持'); continue; }
+    try {
+      await m.init(makeReceiver(m), m.setStatus);
+      m.ready = true;
+      if (m.key !== 'pm') m.setStatus('ok', '已就绪，正在监听');
+    } catch (e) {
+      m.setStatus('err', '初始化失败：' + (e && e.message ? e.message : e));
+    }
+  }
+  log('sys', '', '本标签页 #' + TAB_ID + ' 已就绪。再打开一个标签页，发条消息试试。');
+}
+
+function send(){
+  const text = $('#text').value.trim() || 'Hello';
+  let n = 0;
+  methods.forEach(m => {
+    if (!m.ready || !m.enabled()) return;
+    try { m.send(mk(text)); n++; log('out', m.name, text, TAB_ID, COLOR); }
+    catch (e) { log('sys', m.name, '发送失败：' + e.message); }
+  });
+  if (!n) log('sys', '', '没有可用的发送方案，请至少勾选一个。');
+}
+$('#send').onclick = send;
+$('#text').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+$('#openTab').onclick = () => {
+  const w = window.open(location.href, '_blank');
+  if (w) { pm.peers.add(w); pm.refresh && pm.setStatus && pm.refresh(); }
+  else log('sys', '', '新窗口被浏览器拦截，请允许弹窗，或手动再打开一个本页面。');
+};
+
+/* ---------- 在线标签页（BroadcastChannel 心跳） ---------- */
+(function presence(){
+  if (!('BroadcastChannel' in window)) return;
+  const ch = new BroadcastChannel('demo-presence');
+  const seen = new Map();
+  const box = $('#peersOnline');
+  const render = () => {
+    const now = Date.now();
+    for (const [k, v] of seen) if (now - v.t > 4000) seen.delete(k);
+    box.textContent = '';
+    box.appendChild(chipFor(TAB_ID, COLOR, true));
+    seen.forEach((v, k) => box.appendChild(chipFor(k, v.color, false)));
+  };
+  const chipFor = (id, color, self) => {
+    const b = el('span', 'badge', '#' + id + (self ? '（我）' : ''));
+    b.style.background = color;
+    return b;
+  };
+  const beat = () => ch.postMessage({ id: TAB_ID, color: COLOR });
+  ch.onmessage = e => {
+    const d = e.data;
+    if (d.bye) { seen.delete(d.id); }
+    else { if (!seen.has(d.id)) beat(); seen.set(d.id, { color: d.color, t: Date.now() }); }
+    render();
+  };
+  setInterval(() => { beat(); render(); }, 1500);
+  beat(); render();
+  addEventListener('beforeunload', () => ch.postMessage({ id: TAB_ID, bye: true }));
+})();
+
+/* ---------- Web Locks 主标签页选举 ---------- */
+(function leader(){
+  const badge = $('#leaderBadge'), info = $('#locksInfo');
+  if (!('locks' in navigator) || !window.isSecureContext) {
+    badge.textContent = '主标签页选举不可用';
+    info.textContent = '当前环境不支持 Web Locks（需要支持的浏览器与安全上下文）。';
+    return;
+  }
+  badge.textContent = '⏳ 等待成为主标签页…';
+  navigator.locks.request('demo-leader', () => {
+    badge.textContent = '👑 我是主标签页';
+    log('sys', 'Web Locks', '#' + TAB_ID + ' 成为主标签页');
+    return new Promise(() => {}); // 永不 resolve：持有到标签页关闭
+  });
+  const refresh = async () => {
+    const q = await navigator.locks.query();
+    const held = q.held.filter(l => l.name === 'demo-leader').length;
+    const pend = q.pending.filter(l => l.name === 'demo-leader').length;
+    info.textContent = '当前持有锁：' + held + ' 个，排队等待：' + pend + ' 个。关闭主标签页后，排队中的标签页会自动接任。';
+  };
+  setInterval(refresh, 1000); refresh();
+})();
+
+start();
+})();
+</script>
+</body>
+</html>
