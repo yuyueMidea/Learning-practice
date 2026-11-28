@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command Palette · mini-fzf</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --text:#1a1d24; --muted:#667085; --border:#e4e7ec;
+  --kbd:#f2f4f7; --hover:rgba(15,23,42,.05); --shadow:0 24px 80px rgba(15,23,42,.28);
+  --accent:#3b82f6; --hl:color-mix(in srgb,var(--accent) 78%,#000);
+  --danger:#d92d20; --ok:#12805c;
+}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --panel:#181b21; --text:#e8eaed; --muted:#9aa3b2; --border:#2a2f38;
+  --kbd:#222730; --hover:rgba(255,255,255,.06); --shadow:0 24px 80px rgba(0,0,0,.6);
+  --hl:color-mix(in srgb,var(--accent) 70%,#fff); --danger:#ff7b72; --ok:#4ad2a0;
+}
+@media (prefers-color-scheme:dark){
+  :root[data-theme="auto"]{
+    --bg:#0f1115; --panel:#181b21; --text:#e8eaed; --muted:#9aa3b2; --border:#2a2f38;
+    --kbd:#222730; --hover:rgba(255,255,255,.06); --shadow:0 24px 80px rgba(0,0,0,.6);
+    --hl:color-mix(in srgb,var(--accent) 70%,#fff); --danger:#ff7b72; --ok:#4ad2a0;
+  }
+}
+*{box-sizing:border-box}
+html{font-size:16px}
+body{margin:0;background:var(--bg);color:var(--text);font:400 .9375rem/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+body.lock{overflow:hidden}
+button{font:inherit;color:inherit}
+kbd{font:600 .6875rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:3px 6px;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;background:var(--kbd);color:var(--muted);white-space:nowrap}
+code{font:.8125rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--kbd);padding:1px 6px;border-radius:5px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ───────── demo page ───────── */
+.wrap{max-width:1040px;margin:0 auto;padding:56px 20px 80px}
+.badge{display:inline-block;font-size:.75rem;font-weight:600;color:var(--hl);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:3px 10px;border-radius:99px}
+h1{font-size:2rem;line-height:1.25;margin:14px 0 10px;letter-spacing:-.01em}
+.lead{color:var(--muted);max-width:640px;margin:0 0 22px}
+.cta{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;border:1px solid transparent;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+.cta kbd{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.35);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:36px}
+@media (max-width:820px){.grid{grid-template-columns:1fr}h1{font-size:1.6rem}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px;scroll-margin-top:24px}
+.card.flash{animation:flash 1.2s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
+.card h2{font-size:1rem;margin:0 0 12px}
+.card.wide{grid-column:1/-1}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+td{padding:7px 0;border-top:1px solid var(--border);vertical-align:top}
+tr:first-child td{border-top:0}
+td:first-child{width:46%;padding-right:12px}
+.try{border:0;background:none;padding:0;cursor:pointer;text-align:left}
+.try code{border:1px solid var(--border)}
+.try:hover code{border-color:var(--accent)}
+.keys{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.keys li{display:flex;justify-content:space-between;gap:12px;font-size:.875rem}
+#log{list-style:none;margin:0;padding:0;max-height:240px;overflow:auto;font-size:.8125rem}
+#log li{display:flex;gap:10px;padding:5px 0;border-top:1px solid var(--border)}
+#log li:first-child{border-top:0}
+#log time{color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+#log .via{margin-left:auto;color:var(--muted);flex:none}
+.muted{color:var(--muted)}
+.state{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:.875rem;margin:0}
+.state dt{color:var(--muted)}.state dd{margin:0}
+.sw{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--accent);vertical-align:-1px;margin-right:6px}
+
+/* ───────── palette ───────── */
+.overlay{position:fixed;inset:0;z-index:100;display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 0;background:rgba(10,12,18,.46);backdrop-filter:blur(3px)}
+.overlay[hidden]{display:none}
+.palette{width:min(700px,100%);background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;animation:pop .12s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-6px) scale(.985)}to{opacity:1;transform:none}}
+.p-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.p-head svg{flex:none;color:var(--muted)}
+#q{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:1.0625rem}
+#q::placeholder{color:var(--muted)}
+.spin{flex:none;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:rot .7s linear infinite}
+.spin[hidden]{display:none}
+@keyframes rot{to{transform:rotate(360deg)}}
+.chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;min-height:40px;border-bottom:1px solid var(--border);font-size:.75rem;color:var(--muted)}
+.chips-label{margin-right:2px}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;border:1px solid var(--border);background:var(--kbd);color:var(--text);font:inherit;font-size:.75rem;line-height:1.5}
+button.chip{cursor:pointer}button.chip:hover{border-color:var(--accent)}
+.chip.exact{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.chip.prefix{border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
+.chip.not{border-color:color-mix(in srgb,var(--danger) 60%,transparent);color:var(--danger);text-decoration:line-through}
+.chip-op{font-weight:700;font-size:.6875rem;color:var(--muted);letter-spacing:.04em}
+.list{position:relative;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.inner{position:relative}
+.row{position:absolute;left:8px;right:8px}
+.row.header{display:flex;align-items:flex-end;gap:8px;padding:0 8px 4px;font-size:.6875rem;font-weight:600;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.row.header .busy{display:inline-flex;gap:3px;margin-left:2px}
+.row.header .busy i{width:4px;height:4px;border-radius:50%;background:var(--muted);animation:blink 1s infinite}
+.row.header .busy i:nth-child(2){animation-delay:.15s}.row.header .busy i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.row.item{display:flex;align-items:center;gap:12px;padding:0 10px;border-radius:9px;cursor:pointer}
+.row.item.active{background:color-mix(in srgb,var(--accent) 15%,transparent);box-shadow:inset 3px 0 0 var(--accent)}
+.ico{flex:none;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--kbd);color:var(--muted)}
+.ico svg{width:15px;height:15px}
+.row.item.active .ico{color:var(--hl)}
+.label{flex:1;min-width:0;display:flex;align-items:baseline;gap:10px}
+.title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.title .dir{color:var(--muted)}
+.title .name{font-weight:600}
+.title mark{background:none;color:var(--hl);font-weight:800;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.sub{flex:none;font-size:.75rem;color:var(--muted);white-space:nowrap}
+.tag{flex:none;font-size:.6875rem;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:0 6px}
+.empty{padding:34px 20px;text-align:center;color:var(--muted)}
+.empty[hidden]{display:none}
+.empty b{display:block;color:var(--text);margin-bottom:4px}
+.p-foot{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:9px 16px;border-top:1px solid var(--border);font-size:.75rem;color:var(--muted)}
+.p-foot span.hint{display:inline-flex;align-items:center;gap:5px}
+.p-foot .stat{margin-left:auto;font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* toast */
+#toasts{position:fixed;right:18px;bottom:18px;z-index:200;display:grid;gap:8px;justify-items:end}
+.toast{background:var(--text);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:.875rem;box-shadow:0 8px 30px rgba(0,0,0,.25);animation:pop .15s ease-out;max-width:min(420px,90vw)}
+
+:root[data-motion="off"] *{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <span class="badge">mini-fzf · Command Palette</span>
+  <h1>按下 <kbd class="openkbd">Ctrl K</kbd> 打开命令面板</h1>
+  <p class="lead">fzf 式模糊匹配 · AND / OR / NOT 查询 · 字符高亮 · 键盘导航 · 搜索历史 · 全局快捷键 · 异步搜索 · 虚拟列表。面板里有 <b id="fileCount">0</b> 个模拟文件可搜。</p>
+  <button class="cta" id="openBtn" type="button">打开命令面板 <kbd class="openkbd">Ctrl K</kbd></button>
+
+  <div class="grid">
+    <section class="card" id="sec-syntax">
+      <h2>查询语法（点击示例直接试用）</h2>
+      <table>
+        <tr><td><button class="try" data-q="toggle theme"><code>toggle theme</code></button></td><td><b>AND</b>：空格分隔，所有词都要匹配</td></tr>
+        <tr><td><button class="try" data-q="copy | clear"><code>copy | clear</code></button></td><td><b>OR</b>：<code>|</code> 或大写 <code>OR</code> 连接备选</td></tr>
+        <tr><td><button class="try" data-q="font !reset"><code>font !reset</code></button></td><td><b>NOT</b>：<code>!</code> 或大写 <code>NOT</code> 排除（子串）</td></tr>
+        <tr><td><button class="try" data-q="'compact"><code>'compact</code></button></td><td>精确子串匹配</td></tr>
+        <tr><td><button class="try" data-q="^reset"><code>^reset</code></button></td><td>前缀匹配</td></tr>
+        <tr><td><button class="try" data-q="qhzt"><code>qhzt</code></button></td><td>拼音首字母（命令关键词里预置）</td></tr>
+        <tr><td><button class="try" data-q="usr card .vue !test"><code>usr card .vue !test</code></button></td><td>在 3 万个文件里做模糊 + 排除</td></tr>
+        <tr><td><button class="try" data-q="react | vue 指南"><code>react | vue 指南</code></button></td><td>异步「在线文档」（模拟网络延迟，可取消）</td></tr>
+      </table>
+    </section>
+
+    <section class="card" id="sec-keys">
+      <h2>快捷键</h2>
+      <ul class="keys" id="keyList"></ul>
+      <p class="muted" style="font-size:.8125rem;margin:12px 0 0">面板内：<kbd>↑</kbd><kbd>↓</kbd> 选择，<kbd>Enter</kbd> 执行，<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> 翻搜索历史，<kbd>Esc</kbd> 关闭。</p>
+    </section>
+
+    <section class="card" id="sec-log">
+      <h2>执行日志</h2>
+      <ol id="log"></ol>
+      <p class="muted" id="logEmpty" style="margin:0;font-size:.875rem">还没有执行过命令。</p>
+    </section>
+
+    <section class="card" id="sec-state">
+      <h2>当前状态</h2>
+      <dl class="state" id="stateList"></dl>
+    </section>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="palette" role="dialog" aria-modal="true" aria-label="命令面板">
+    <div class="p-head">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="list" aria-autocomplete="list" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="搜索命令、文件…   例如  vue | react !test">
+      <span class="spin" id="spin" hidden></span>
+      <kbd>Esc</kbd>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="list" id="list" role="listbox" aria-label="搜索结果"><div class="inner" id="inner"></div></div>
+    <div class="empty" id="empty" hidden><b>没有匹配的结果</b>试试减少关键词，或用 <code>|</code> 表示 OR</div>
+    <div class="p-foot">
+      <span class="hint"><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+      <span class="hint"><kbd>Enter</kbd> 执行</span>
+      <span class="hint"><kbd>Alt</kbd><kbd>↑</kbd><kbd>↓</kbd> 历史</span>
+      <span class="stat" id="stat"></span>
+    </div>
+    <div class="sr" id="live" aria-live="polite"></div>
+  </div>
+</div>
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+// <core>
+/* ===================== 纯逻辑：fzf 式匹配 + 查询解析（无 DOM 依赖） ===================== */
+const SC = { match:16, boundary:10, camel:8, consecutive:6, firstMult:2, gapStart:-3, gapExt:-1 };
+const SEP = 0, LOWER = 1, UPPER = 2, DIGIT = 3, NEG = -1000000000;
+const ASCII_ONLY = /^[\x00-\x7f]*$/;
+
+function charClass(ch) {
+  const c = ch.charCodeAt(0);
+  if (c < 128) {
+    if (c >= 97 && c <= 122) return LOWER;
+    if (c >= 65 && c <= 90) return UPPER;
+    if (c >= 48 && c <= 57) return DIGIT;
+    return SEP;
+  }
+  if (c >= 0xd800 && c <= 0xdfff) return LOWER;
+  const lo = ch.toLowerCase(), up = ch.toUpperCase();
+  if (lo !== up) return ch === up ? UPPER : LOWER;
+  return /[\p{L}\p{N}]/u.test(ch) ? LOWER : SEP;
+}
+
+// 折叠为小写且保持等长，保证位置不错位
+function fold(s) {
+  if (ASCII_ONLY.test(s)) return s.toLowerCase();
+  let out = '';
+  for (let i = 0; i < s.length; i++) { const l = s[i].toLowerCase(); out += l.length === 1 ? l : s[i]; }
+  return out;
+}
+
+// 每个位置的奖励：词首 / 驼峰 / 缩写交界 / 字母数字交界
+function computeBonuses(text) {
+  const n = text.length, cls = new Uint8Array(n), bonus = new Int16Array(n);
+  for (let i = 0; i < n; i++) cls[i] = charClass(text[i]);
+  for (let i = 0; i < n; i++) {
+    const cur = cls[i]; if (cur === SEP) continue;
+    const prev = i === 0 ? SEP : cls[i - 1];
+    if (prev === SEP) bonus[i] = SC.boundary;
+    else if (prev === LOWER && cur === UPPER) bonus[i] = SC.camel;
+    else if (prev === UPPER && cur === UPPER && i + 1 < n && cls[i + 1] === LOWER) bonus[i] = SC.camel;
+    else if (prev === DIGIT && cur === UPPER) bonus[i] = SC.camel;
+    else if (prev !== DIGIT && cur === DIGIT) bonus[i] = SC.camel;
+  }
+  return bonus;
+}
+
+function prepare(text) { return { text, folded: fold(text), bonus: computeBonuses(text) }; }
+
+let dpBuf = new Int32Array(2048), parentBuf = new Int32Array(2048);
+
+/* DP：dp[i][j] = q[i] 匹配在 t[j] 时 q[0..i] 的最高分。
+   连续转移 O(1)；间隔转移用滚动变量 H 把 max_k 降到 O(1)，整体 O(m·W)。 */
+function matchPrepared(qf, p) {
+  const m = qf.length; if (m === 0) return { score: 0, positions: [] };
+  const t = p.folded, bonus = p.bonus, n = t.length; if (m > n) return null;
+  let qi = 0, first = -1;
+  for (let j = 0; j < n && qi < m; j++) if (t.charCodeAt(j) === qf.charCodeAt(qi)) { if (qi === 0) first = j; qi++; }
+  if (qi < m) return null;
+  let last = -1; qi = m - 1;
+  for (let j = n - 1; j >= first && qi >= 0; j--) if (t.charCodeAt(j) === qf.charCodeAt(qi)) { if (qi === m - 1) last = j; qi--; }
+  const W = last - first + 1, size = m * W;
+  if (dpBuf.length < size) { const cap = Math.max(size, dpBuf.length * 2); dpBuf = new Int32Array(cap); parentBuf = new Int32Array(cap); }
+  const dp = dpBuf, parent = parentBuf; dp.fill(NEG, 0, size);
+  const q0 = qf.charCodeAt(0);
+  for (let j = 0; j < W; j++) if (t.charCodeAt(first + j) === q0) dp[j] = SC.match + bonus[first + j] * SC.firstMult;
+  for (let i = 1; i < m; i++) {
+    const row = i * W, prev = row - W, qc = qf.charCodeAt(i);
+    let H = NEG, hArg = -1;
+    for (let j = 0; j < W; j++) {
+      if (j >= 2) {
+        let nh = NEG, na = -1;
+        if (H > NEG) { nh = H + SC.gapExt; na = hArg; }
+        const pv = dp[prev + j - 2];
+        if (pv > NEG && pv + SC.gapStart > nh) { nh = pv + SC.gapStart; na = j - 2; }
+        H = nh; hArg = na;
+      }
+      if (t.charCodeAt(first + j) !== qc) continue;
+      let best = NEG, from = -1;
+      if (j >= 1) { const pv = dp[prev + j - 1]; if (pv > NEG) { best = pv + SC.consecutive; from = j - 1; } }
+      if (H > best) { best = H; from = hArg; }
+      if (best > NEG) { dp[row + j] = best + SC.match + bonus[first + j]; parent[row + j] = from; }
+    }
+  }
+  const lastRow = (m - 1) * W; let bs = NEG, bj = -1;
+  for (let j = 0; j < W; j++) if (dp[lastRow + j] > bs) { bs = dp[lastRow + j]; bj = j; }
+  if (bj < 0) return null;
+  const positions = new Array(m); let j = bj;
+  for (let i = m - 1; i >= 0; i--) { positions[i] = first + j; if (i > 0) j = parent[i * W + j]; }
+  return { score: bs, positions };
+}
+
+/* ---- 查询解析：空格=AND；| 或 OR=OR（只在相邻词之间）；! 或 NOT=排除；'精确 ^前缀 ---- */
+function makeAlt(p, negate) {
+  let not = negate, type = 'fuzzy';
+  if (p[0] === '!') { not = true; p = p.slice(1); }
+  if (p[0] === "'") { type = 'exact'; p = p.slice(1); }
+  else if (p[0] === '^') { type = 'prefix'; p = p.slice(1); }
+  if (!p) return null;
+  return { type: not ? 'not' : type, raw: p, text: fold(p) };
+}
+
+function parseQuery(input) {
+  const groups = [];
+  let pendingOr = false, pendingNot = false;
+  const push = (alt) => {
+    if (!alt) return;
+    if (pendingOr && groups.length) groups[groups.length - 1].alts.push(alt);
+    else groups.push({ alts: [alt] });
+    pendingOr = false;
+  };
+  for (const tok of input.trim().split(/\s+/)) {
+    if (!tok || tok === 'AND') continue;
+    if (tok === 'OR' || tok === '|') { pendingOr = true; continue; }
+    if (tok === 'NOT') { pendingNot = true; continue; }
+    tok.split('|').forEach((part, idx) => {
+      if (idx > 0) pendingOr = true;
+      if (!part) return;
+      const alt = makeAlt(part, pendingNot); pendingNot = false;
+      push(alt);
+    });
+  }
+  return { groups };
+}
+
+// 只含"变严格"的词项（无 OR / NOT）时，新查询的结果必是旧查询结果的子集 → 可增量筛选
+function isMonotone(parsed) { return parsed.groups.every(g => g.alts.length === 1 && g.alts[0].type !== 'not'); }
+
+function exactScore(len, bonusAt) { return len * SC.match + (len - 1) * SC.consecutive + bonusAt * SC.firstMult; }
+function range(s, len) { const r = new Array(len); for (let i = 0; i < len; i++) r[i] = s + i; return r; }
+
+function ensure(e) {
+  if (!e._t) { e._t = prepare(e.title); e._m = e.meta ? prepare(e.meta) : null; }
+  return e;
+}
+
+// 单个词项对单个条目：优先匹配标题（可高亮），其次匹配 category/关键词（分数减半、不高亮）
+function evalAlt(a, e) {
+  const T = e._t, M = e._m;
+  if (a.type === 'not') {
+    return (T.folded.includes(a.text) || (M && M.folded.includes(a.text))) ? null : { score: 0, positions: [] };
+  }
+  if (a.type === 'prefix') {
+    return T.folded.startsWith(a.text) ? { score: exactScore(a.text.length, T.bonus[0]) + 20, positions: range(0, a.text.length) } : null;
+  }
+  if (a.type === 'exact') {
+    const i = T.folded.indexOf(a.text);
+    if (i >= 0) return { score: exactScore(a.text.length, T.bonus[i]), positions: range(i, a.text.length) };
+    if (M && M.folded.includes(a.text)) return { score: a.text.length * SC.match >> 1, positions: [] };
+    return null;
+  }
+  const r = matchPrepared(a.text, T);
+  if (r) return r;
+  if (M) { const r2 = matchPrepared(a.text, M); if (r2) return { score: r2.score >> 1, positions: [] }; }
+  return null;
+}
+
+// AND（所有组）× OR（组内取最高分的备选）；位置合并去重
+function evalEntry(parsed, e) {
+  ensure(e);
+  let total = 0, all = null;
+  for (const g of parsed.groups) {
+    let best = null;
+    for (const a of g.alts) { const r = evalAlt(a, e); if (r && (!best || r.score > best.score)) best = r; }
+    if (!best) return null;
+    total += best.score;
+    if (best.positions.length) { if (!all) all = []; for (const p of best.positions) all.push(p); }
+  }
+  let positions = [];
+  if (all) { all.sort((x, y) => x - y); for (const p of all) if (!positions.length || positions[positions.length - 1] !== p) positions.push(p); }
+  return { score: total, positions };
+}
+
+const cmpHit = (a, b) => b.score - a.score || a.e.title.length - b.e.title.length || a.e.idx - b.e.idx;
+
+function positionsToRanges(positions) {
+  const out = [];
+  for (const p of positions) { const t = out[out.length - 1]; if (t && t[1] === p) t[1] = p + 1; else out.push([p, p + 1]); }
+  return out;
+}
+// </core>
+
+/* ===================== 应用层 ===================== */
+(function () {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+};
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* ---------- 偏好 ---------- */
+const DEFAULT_PREFS = { theme: 'auto', accent: '#3b82f6', compact: false, font: 16, motion: true };
+let prefs = Object.assign({}, DEFAULT_PREFS, store.get('cp.prefs', {}));
+function applyPrefs() {
+  const r = document.documentElement;
+  r.dataset.theme = prefs.theme; r.dataset.motion = prefs.motion ? 'on' : 'off';
+  r.style.setProperty('--accent', prefs.accent); r.style.fontSize = prefs.font + 'px';
+  H.item = prefs.compact ? 36 : 44;
+  store.set('cp.prefs', prefs); renderState();
+}
+const ACCENT_NAMES = { '#3b82f6': '蓝色', '#8b5cf6': '紫色', '#10b981': '绿色', '#f97316': '橙色' };
+
+/* ---------- 数据：命令 ---------- */
+const toast = (text) => {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = text;
+  $('#toasts').append(el); setTimeout(() => el.remove(), 2600);
+};
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (_) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.append(ta); ta.select(); try { document.execCommand('copy'); } catch (_) {} ta.remove();
+  }
+  toast('已复制：' + text);
+}
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+function goto(id) { const el = document.getElementById(id); el.scrollIntoView({ behavior: prefs.motion ? 'smooth' : 'auto', block: 'start' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+const setAccent = (c) => () => { prefs.accent = c; applyPrefs(); toast('强调色：' + ACCENT_NAMES[c]); };
+
+const COMMANDS = [
+  { id: 'theme.toggle', title: 'Toggle Theme 切换明暗主题', cat: '外观', kw: 'dark light 夜间 暗黑 深色 浅色 qhzt zhuti', keys: 'alt+shift+t',
+    run() { const dark = document.documentElement.dataset.theme === 'dark' || (prefs.theme === 'auto' && matchMedia('(prefers-color-scheme:dark)').matches); prefs.theme = dark ? 'light' : 'dark'; applyPrefs(); toast('主题：' + (dark ? '浅色' : '深色')); } },
+  { id: 'theme.auto', title: 'Theme: Follow System 主题跟随系统', cat: '外观', kw: 'auto system 自动 gsxt', run() { prefs.theme = 'auto'; applyPrefs(); toast('主题：跟随系统'); } },
+  { id: 'accent.blue', title: 'Accent Color: Blue 强调色 蓝色', cat: '外观', kw: 'color 颜色 lanse qtss', run: setAccent('#3b82f6') },
+  { id: 'accent.violet', title: 'Accent Color: Violet 强调色 紫色', cat: '外观', kw: 'color purple 颜色 zise qtss', run: setAccent('#8b5cf6') },
+  { id: 'accent.green', title: 'Accent Color: Green 强调色 绿色', cat: '外观', kw: 'color 颜色 lvse qtss', run: setAccent('#10b981') },
+  { id: 'accent.orange', title: 'Accent Color: Orange 强调色 橙色', cat: '外观', kw: 'color 颜色 chengse qtss', run: setAccent('#f97316') },
+  { id: 'density.toggle', title: 'Toggle Compact Mode 紧凑模式', cat: '视图', kw: 'density 密度 行高 jcms', keys: 'alt+shift+c', run() { prefs.compact = !prefs.compact; applyPrefs(); toast('紧凑模式：' + (prefs.compact ? '开' : '关')); } },
+  { id: 'font.up', title: 'Increase Font Size 放大字体', cat: '视图', kw: 'zoom bigger 字号 fdzt', keys: 'alt+shift+equal', run() { prefs.font = Math.min(22, prefs.font + 1); applyPrefs(); toast('字号 ' + prefs.font + 'px'); } },
+  { id: 'font.down', title: 'Decrease Font Size 缩小字体', cat: '视图', kw: 'zoom smaller 字号 sxzt', keys: 'alt+shift+minus', run() { prefs.font = Math.max(12, prefs.font - 1); applyPrefs(); toast('字号 ' + prefs.font + 'px'); } },
+  { id: 'font.reset', title: 'Reset Font Size 重置字体大小', cat: '视图', kw: 'zoom 字号 czzt', run() { prefs.font = 16; applyPrefs(); toast('字号已重置'); } },
+  { id: 'motion.toggle', title: 'Toggle Animations 开关动画', cat: '视图', kw: 'motion animation 动效 kgdh', run() { prefs.motion = !prefs.motion; applyPrefs(); toast('动画：' + (prefs.motion ? '开' : '关')); } },
+  { id: 'nav.syntax', title: 'Go to: Query Syntax 跳转到查询语法', cat: '导航', kw: 'scroll 滚动 cxyf', keys: 'alt+shift+digit1', run() { goto('sec-syntax'); } },
+  { id: 'nav.keys', title: 'Go to: Shortcuts 跳转到快捷键列表', cat: '导航', kw: 'scroll keyboard 滚动 kjj', keys: 'alt+shift+digit2', run() { goto('sec-keys'); } },
+  { id: 'nav.log', title: 'Go to: Execution Log 跳转到执行日志', cat: '导航', kw: 'scroll history 滚动 zxrz', keys: 'alt+shift+digit3', run() { goto('sec-log'); } },
+  { id: 'nav.top', title: 'Scroll to Top 回到顶部', cat: '导航', kw: 'home 顶部 hddb', keys: 'alt+shift+h', run() { window.scrollTo({ top: 0, behavior: prefs.motion ? 'smooth' : 'auto' }); } },
+  { id: 'tool.uuid', title: 'Copy UUID 生成并复制 UUID', cat: '工具', kw: 'random id guid 随机 scfz', run() { return copy(uuid()); } },
+  { id: 'tool.url', title: 'Copy Page URL 复制页面链接', cat: '工具', kw: 'link address 地址 fzymlj', run() { return copy(location.href); } },
+  { id: 'tool.ts', title: 'Copy Timestamp 复制当前时间戳', cat: '工具', kw: 'time date 时间 fzdqsjc', run() { return copy(String(Date.now())); } },
+  { id: 'tool.remind', title: 'Remind Me in 5s 五秒后提醒我', cat: '工具', kw: 'timer async 异步 定时 tx wmhtx', async run() { toast('好的，5 秒后提醒你…'); await sleep(5000); toast('⏰ 时间到！'); addLog('提醒触发', '异步任务'); } },
+  { id: 'tool.fullscreen', title: 'Toggle Fullscreen 切换全屏', cat: '工具', kw: 'screen 全屏 qhqp', keys: 'alt+shift+f', run() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => toast('浏览器不允许进入全屏')); } },
+  { id: 'tool.print', title: 'Print Page 打印页面', cat: '工具', kw: 'pdf 打印 dyym', run() { setTimeout(() => window.print(), 50); } },
+  { id: 'hist.clear', title: 'Clear Search History 清除搜索历史', cat: '历史', kw: 'delete remove 删除 qcssls', run() { history = []; store.set('cp.history', history); renderState(); toast('搜索历史已清除'); } },
+  { id: 'hist.recent', title: 'Clear Recent Commands 清除最近使用', cat: '历史', kw: 'delete mru 删除 qczjsy', run() { recent = []; usage = {}; store.set('cp.recent', recent); store.set('cp.usage', usage); toast('最近使用已清除'); } },
+  { id: 'log.clear', title: 'Clear Execution Log 清空执行日志', cat: '历史', kw: 'delete 删除 qkzxrz', keys: 'alt+shift+l', run() { logs.length = 0; renderLog(); toast('日志已清空'); } },
+  { id: 'sys.reset', title: 'Reset All Settings 重置所有设置', cat: '系统', kw: 'default restore 恢复默认 czszsy', run() { prefs = Object.assign({}, DEFAULT_PREFS); applyPrefs(); toast('已恢复默认设置'); } },
+  { id: 'sys.reload', title: 'Reload Demo 重新加载演示', cat: '系统', kw: 'refresh restart 刷新 cxjz', run() { location.reload(); } },
+].map((c, i) => Object.assign(c, { kind: 'cmd', idx: i, meta: c.cat + ' ' + c.kw }));
+const CMD_BY_ID = new Map(COMMANDS.map(c => [c.id, c]));
+
+/* ---------- 数据：3 万个模拟文件（惰性预处理） ---------- */
+function genFiles(n) {
+  let s = 20260128; const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+  const dirs = ['src/components', 'src/views', 'src/store', 'src/utils', 'src/api', 'src/hooks', 'src/composables', 'packages/core/src', 'packages/ui/src', 'docs/guide', 'tests/unit', 'tests/e2e', 'scripts', 'public/assets'];
+  const A = ['User', 'Order', 'Product', 'Cart', 'Auth', 'Search', 'Profile', 'Setting', 'Dashboard', 'Report', 'Payment', 'Notification', 'Message', 'Upload', 'Table', 'Form', 'Modal', 'Chart', 'Menu', 'Tree', 'Tab', 'Card', 'Avatar', 'Badge', 'Button', 'Input', 'Select', 'Date', 'Calendar', 'Editor'];
+  const B = ['List', 'Detail', 'Item', 'Panel', 'Dialog', 'Header', 'Footer', 'Sidebar', 'Filter', 'Picker', 'Manager', 'Service', 'Store', 'Provider', 'Helper', 'Hook', 'Config', 'Types', 'Utils', 'View'];
+  const E = ['.vue', '.ts', '.tsx', '.js', '.css', '.md', '.json', '.test.ts', '.spec.ts'];
+  const seen = new Set(), out = [];
+  while (out.length < n) {
+    const a = A[rnd() * A.length | 0], b = B[rnd() * B.length | 0], r = rnd();
+    let name = r < .5 ? a + b : r < .8 ? (a + b).replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase() : a.toLowerCase() + '_' + b.toLowerCase();
+    if (rnd() < .12) name += (rnd() * 9 | 0) + 1;
+    const p = dirs[rnd() * dirs.length | 0] + '/' + name + E[rnd() * E.length | 0];
+    if (seen.has(p)) continue; seen.add(p);
+    out.push({ kind: 'file', id: p, title: p, meta: '', idx: out.length });
+  }
+  return out;
+}
+const FILES = genFiles(30000);
+$('#fileCount').textContent = FILES.length.toLocaleString();
+
+/* ---------- 数据：模拟"在线文档"（异步、可取消） ---------- */
+const REMOTE = [
+  ['Vue 3 响应式系统原理', 'Vue 官方文档'], ['Vue Router 路由守卫指南', 'Vue 官方文档'], ['Pinia 状态管理最佳实践', 'Vue 生态'], ['Vue 3 diff 算法详解', '技术博客'],
+  ['React Hooks 完全指南', 'React 文档'], ['React Server Components 入门', 'React 文档'], ['React 性能优化清单', '技术博客'], ['React Query 缓存策略', 'TanStack'],
+  ['TypeScript 类型体操指南', 'TS 手册'], ['TypeScript 5 新特性速览', 'TS 手册'], ['泛型与条件类型实战', '技术博客'],
+  ['CSS Container Queries 详解', 'MDN'], ['CSS Grid 布局指南', 'MDN'], ['现代 CSS 选择器 :has() 用法', 'MDN'], ['Flexbox 常见布局模式', 'MDN'],
+  ['Web Workers 使用指南', 'MDN'], ['Service Worker 离线缓存', 'MDN'], ['IndexedDB 入门到实战', 'MDN'], ['Web Components 自定义元素', 'MDN'],
+  ['Fuzzy Search 算法综述', '论文笔记'], ['编辑距离与最长公共子序列', '算法笔记'], ['动态规划在前端的应用', '算法笔记'], ['虚拟列表原理与实现指南', '技术博客'],
+  ['Vite 构建原理指南', 'Vite 文档'], ['Rollup 插件开发指南', 'Rollup 文档'], ['Webpack 5 模块联邦', 'Webpack 文档'], ['Turbopack 增量编译', 'Vercel'],
+  ['Node.js 事件循环详解', 'Node 文档'], ['Deno 与 Bun 对比', '技术博客'], ['pnpm workspace 管理单体仓库', 'pnpm 文档'],
+  ['前端性能指标 Core Web Vitals 指南', 'web.dev'], ['无障碍 ARIA combobox 模式', 'W3C'], ['键盘可访问性设计', 'W3C'], ['国际化 Intl API 用法', 'MDN'],
+  ['Git 工作流最佳实践', 'Pro Git'], ['Monorepo 发布流程', '技术博客'], ['测试金字塔与 Vitest 实践', 'Vitest 文档'], ['Playwright 端到端测试指南', 'Playwright 文档'],
+].map(([title, sub], i) => ({ kind: 'remote', id: 'doc-' + i, title, sub, meta: sub, idx: i }));
+const REMOTE_BY_ID = new Map(REMOTE.map(d => [d.id, d]));
+function fakeRemote(parsed, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException('aborted', 'AbortError'));
+    const timer = setTimeout(() => {
+      const hits = [];
+      for (const d of REMOTE) { const r = evalEntry(parsed, d); if (r) hits.push({ e: d, score: r.score, positions: r.positions }); }
+      hits.sort(cmpHit); resolve(hits.slice(0, 30));
+    }, 350 + Math.random() * 450);
+    signal.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('aborted', 'AbortError')); }, { once: true });
+  });
+}
+
+/* ---------- 持久化：搜索历史 / 最近使用 / 使用频次 ---------- */
+let history = store.get('cp.history', []);
+let recent = store.get('cp.recent', []);     // [{kind,id}]，最近在前
+let usage = store.get('cp.usage', {});       // { cmdId: count }
+const boost = (e) => e.kind === 'cmd' ? Math.min((usage[e.id] || 0) * 2, 12) : 0;
+function pushHistory(q) { history = [q, ...history.filter(x => x !== q)].slice(0, 20); store.set('cp.history', history); renderState(); }
+function recordRecent(e) {
+  recent = [{ kind: e.kind, id: e.id }, ...recent.filter(r => !(r.kind === e.kind && r.id === e.id))].slice(0, 8);
+  if (e.kind === 'cmd') usage[e.id] = (usage[e.id] || 0) + 1;
+  store.set('cp.recent', recent); store.set('cp.usage', usage);
+}
+function resolveRecent(r) {
+  if (r.kind === 'cmd') return CMD_BY_ID.get(r.id);
+  if (r.kind === 'remote') return REMOTE_BY_ID.get(r.id);
+  return { kind: 'file', id: r.id, title: r.id, meta: '', idx: -1 };
+}
+
+/* ---------- 快捷键 ---------- */
+const CODE = { equal: 'Equal', minus: 'Minus' };
+function parseKeys(spec) {
+  const parts = spec.split('+'), key = parts.pop();
+  return { alt: parts.includes('alt'), shift: parts.includes('shift'), ctrl: parts.includes('ctrl'), meta: parts.includes('meta'),
+    code: CODE[key] || (key.startsWith('digit') ? 'Digit' + key.slice(5) : 'Key' + key.toUpperCase()) };
+}
+const SHORTCUTS = COMMANDS.filter(c => c.keys).map(c => ({ cmd: c, k: parseKeys(c.keys) }));
+function fmtKeys(spec) {
+  const map = { alt: isMac ? '⌥' : 'Alt', shift: isMac ? '⇧' : 'Shift', ctrl: 'Ctrl', meta: '⌘', equal: '+', minus: '−' };
+  const parts = spec.split('+').map(p => map[p] || (p.startsWith('digit') ? p.slice(5) : p.toUpperCase()));
+  return parts.join(isMac ? '' : '+');
+}
+const OPEN_LABEL = isMac ? '⌘ K' : 'Ctrl K';
+document.querySelectorAll('.openkbd').forEach(k => k.textContent = OPEN_LABEL);
+
+/* ---------- 执行日志 / 状态面板 ---------- */
+const logs = [];
+function addLog(text, via) { logs.unshift({ t: new Date().toLocaleTimeString('zh-CN', { hour12: false }), text, via }); if (logs.length > 50) logs.pop(); renderLog(); }
+function renderLog() {
+  const ol = $('#log'); ol.replaceChildren();
+  for (const l of logs) {
+    const li = document.createElement('li');
+    const t = document.createElement('time'); t.textContent = l.t;
+    const b = document.createElement('span'); b.textContent = l.text;
+    const v = document.createElement('span'); v.className = 'via'; v.textContent = l.via;
+    li.append(t, b, v); ol.append(li);
+  }
+  $('#logEmpty').hidden = logs.length > 0;
+}
+function renderState() {
+  const dl = $('#stateList'); dl.replaceChildren();
+  const add = (k, v, sw) => { const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd');
+    if (sw) { const s = document.createElement('span'); s.className = 'sw'; dd.append(s); } dd.append(v); dl.append(dt, dd); };
+  add('主题', { auto: '跟随系统', light: '浅色', dark: '深色' }[prefs.theme]);
+  add('强调色', ACCENT_NAMES[prefs.accent] || prefs.accent, true);
+  add('紧凑模式', prefs.compact ? '开' : '关');
+  add('字号', prefs.font + 'px');
+  add('动画', prefs.motion ? '开' : '关');
+  add('搜索历史', history.length + ' 条');
+}
+(function renderKeyList() {
+  const ul = $('#keyList');
+  const row = (name, keys) => { const li = document.createElement('li'); const s = document.createElement('span'); s.textContent = name; const k = document.createElement('kbd'); k.textContent = keys; li.append(s, k); ul.append(li); };
+  row('打开 / 关闭命令面板', OPEN_LABEL);
+  for (const { cmd } of SHORTCUTS) row(cmd.title.replace(/^[^ ]+( [^ ]+)*? (?=[^\x00-\x7f])/, '') || cmd.title, fmtKeys(cmd.keys));
+})();
+
+/* ===================== 面板 ===================== */
+const overlay = $('#overlay'), input = $('#q'), listEl = $('#list'), inner = $('#inner'),
+      chipsEl = $('#chips'), emptyEl = $('#empty'), statEl = $('#stat'), spinEl = $('#spin'), liveEl = $('#live');
+const H = { header: 30, item: 44 };
+const EXAMPLES = ['toggle theme', 'copy | clear', 'font !reset', 'usr card .vue !test'];
+const state = { open: false, query: '', parsed: { groups: [] }, cmdRes: [], fileRes: [], remoteRes: [],
+  filesLoading: false, remoteLoading: false, localMs: null, remoteMs: null,
+  rows: [], tops: [0], total: 0, active: -1, activeKey: null, userMoved: false };
+let seq = 0, remoteCtl = null, remoteTimer = 0, histIdx = -1, lastFocus = null;
+let fileLast = null; // {q, pool} 上一次完整完成的文件搜索，用于增量筛选
+const rendered = new Map();
+
+const ICONS = {
+  cmd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 5 4-5 4"/><path d="M13 17h6"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  remote: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>'
+};
+
+/* ---- 打开 / 关闭 ---- */
+function openPalette(initial) {
+  if (state.open) { if (initial != null) { input.value = initial; onQuery(); } return; }
+  lastFocus = document.activeElement; state.open = true;
+  overlay.hidden = false; document.body.classList.add('lock');
+  input.value = initial || ''; histIdx = -1; onQuery();
+  input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+}
+function closePalette() {
+  if (!state.open) return;
+  state.open = false; overlay.hidden = true; document.body.classList.remove('lock');
+  seq++; clearTimeout(remoteTimer); if (remoteCtl) remoteCtl.abort(); // 取消所有在途搜索
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+/* ---- 搜索调度：同步命令 + 分片文件 + 防抖异步远程 ---- */
+function onQuery() {
+  const q = input.value, my = ++seq;
+  state.query = q; state.userMoved = false; state.t0 = performance.now();
+  clearTimeout(remoteTimer); if (remoteCtl) { remoteCtl.abort(); remoteCtl = null; }
+  const parsed = state.parsed = parseQuery(q);
+  state.remoteRes = []; state.remoteMs = null; state.localMs = null;
+  if (!parsed.groups.length) {
+    state.cmdRes = []; state.fileRes = []; state.filesLoading = false; state.remoteLoading = false;
+    updateChips(); rebuild(); return;
+  }
+  const hits = [];
+  for (const c of COMMANDS) { const r = evalEntry(parsed, c); if (r) hits.push({ e: c, score: r.score + boost(c), positions: r.positions }); }
+  hits.sort(cmpHit); state.cmdRes = hits;
+  state.filesLoading = true; state.remoteLoading = true;   // 文件结果保留旧值直到新结果就绪，避免列表闪烁
+  runFiles(parsed, q, my);
+  remoteTimer = setTimeout(() => runRemote(parsed, my), 200);
+  updateChips(); rebuild();
+}
+
+// 时间分片：每片最多约 6ms，然后让出主线程；任何新输入都会使旧任务作废
+async function runFiles(parsed, q, my) {
+  const mono = isMonotone(parsed);
+  const pool = (mono && fileLast && fileLast.mono && q.startsWith(fileLast.q)) ? fileLast.pool : FILES;
+  const matched = []; let i = 0;
+  while (i < pool.length) {
+    const end = performance.now() + 6;
+    while (i < pool.length && performance.now() < end) {
+      for (let k = 0; k < 128 && i < pool.length; k++, i++) {
+        const e = pool[i], r = evalEntry(parsed, e);
+        if (r) matched.push({ e, score: r.score, positions: r.positions });
+      }
+    }
+    if (my !== seq) return;
+    if (i < pool.length) { await sleep(0); if (my !== seq) return; }
+  }
+  fileLast = { q, mono, pool: matched.map(m => m.e) };
+  matched.sort(cmpHit);
+  state.fileRes = matched; state.filesLoading = false; state.localMs = performance.now() - state.t0;
+  rebuild();
+}
+async function runRemote(parsed, my) {
+  if (my !== seq) return;
+  const ctl = remoteCtl = new AbortController(), t = performance.now();
+  try {
+    const res = await fakeRemote(parsed, ctl.signal);
+    if (my !== seq) return;
+    state.remoteRes = res; state.remoteMs = performance.now() - t;
+  } catch (e) { if (e.name === 'AbortError') return; state.remoteRes = []; }
+  state.remoteLoading = false; rebuild();
+}
+
+/* ---- 行模型 ---- */
+function rebuild() {
+  const rows = [], S = state;
+  const header = (label, count, busy) => rows.push({ kind: 'header', label, count, busy, h: H.header });
+  const items = (arr, src, cap) => { for (let i = 0; i < arr.length && i < cap; i++) rows.push({ kind: 'item', src, key: src + ':' + arr[i].e.kind + ':' + arr[i].e.id, e: arr[i].e, pos: arr[i].positions, h: H.item }); };
+  let nCmd = 0, nFile = 0, nRemote = 0;
+  if (!S.parsed.groups.length) {
+    const rec = recent.map(resolveRecent).filter(Boolean).slice(0, 5);
+    if (rec.length) { header('最近使用', rec.length); items(rec.map(e => ({ e, positions: [] })), 'recent', 5); }
+    header('所有命令', COMMANDS.length); items(COMMANDS.map(e => ({ e, positions: [] })), 'all', 100);
+  } else {
+    nCmd = S.cmdRes.length; nFile = S.fileRes.length; nRemote = S.remoteRes.length;
+    if (nCmd) { header('命令', nCmd); items(S.cmdRes, 'cmd', 50); }
+    if (nFile || S.filesLoading) { header('文件', nFile ? (nFile > 1000 ? nFile.toLocaleString() + '，显示前 1,000' : nFile) : '', S.filesLoading); items(S.fileRes, 'file', 1000); }
+    if (nRemote || S.remoteLoading) { header('在线文档', nRemote || '', S.remoteLoading); items(S.remoteRes, 'remote', 30); }
+  }
+  S.rows = rows;
+  const tops = new Array(rows.length + 1); tops[0] = 0;
+  for (let i = 0; i < rows.length; i++) tops[i + 1] = tops[i] + rows[i].h;
+  S.tops = tops; S.total = tops[rows.length] + 6;
+  // 保持选中项；用户没动过就默认选第一个结果
+  let act = -1;
+  if (S.userMoved && S.activeKey) act = rows.findIndex(r => r.kind === 'item' && r.key === S.activeKey);
+  if (act < 0) act = rows.findIndex(r => r.kind === 'item');
+  S.active = act; S.activeKey = act >= 0 ? rows[act].key : null;
+
+  const hasItems = act >= 0;
+  emptyEl.hidden = hasItems || S.filesLoading || S.remoteLoading;
+  listEl.hidden = !hasItems && !(S.filesLoading || S.remoteLoading);
+  spinEl.hidden = !(S.filesLoading || S.remoteLoading);
+  listEl.style.height = Math.min(S.total, Math.min(460, window.innerHeight * 0.55)) + 'px';
+  inner.style.height = S.total + 'px';
+  rendered.clear(); inner.replaceChildren(); renderList();
+  if (!S.userMoved) listEl.scrollTop = 0;
+  input.setAttribute('aria-activedescendant', act >= 0 ? 'opt-' + act : '');
+
+  const total = nCmd + nFile + nRemote, parts = [];
+  if (S.parsed.groups.length) {
+    parts.push(total.toLocaleString() + ' 个结果');
+    if (S.localMs != null) parts.push(S.localMs.toFixed(1) + ' ms');
+    if (S.remoteMs != null) parts.push('在线 ' + Math.round(S.remoteMs) + ' ms');
+  } else parts.push(COMMANDS.length + ' 个命令');
+  statEl.textContent = parts.join(' · ');
+  if (!S.filesLoading && !S.remoteLoading) liveEl.textContent = S.parsed.groups.length ? (total ? total + ' 个结果' : '没有匹配的结果') : '';
+}
+
+/* ---- 虚拟列表：只渲染可视区（含 overscan）的行 ---- */
+function lowerBound(tops, y) { // 最大的 i 使 tops[i] <= y
+  let lo = 0, hi = tops.length - 2;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (tops[mid] <= y) lo = mid; else hi = mid - 1; }
+  return lo;
+}
+function renderList() {
+  const { rows, tops } = state; if (!rows.length) return;
+  const st = listEl.scrollTop, vh = listEl.clientHeight || 400, over = 160;
+  const lo = lowerBound(tops, Math.max(0, st - over));
+  let hi = lo; while (hi < rows.length - 1 && tops[hi + 1] < st + vh + over) hi++;
+  for (const [i, el] of rendered) if (i < lo || i > hi) { el.remove(); rendered.delete(i); }
+  for (let i = lo; i <= hi; i++) {
+    let el = rendered.get(i);
+    if (!el) { el = buildRow(rows[i], i); el.style.top = tops[i] + 'px'; el.style.height = rows[i].h + 'px'; inner.append(el); rendered.set(i, el); }
+    if (rows[i].kind === 'item') { const on = i === state.active; el.classList.toggle('active', on); el.setAttribute('aria-selected', on); }
+  }
+}
+function buildRow(r, i) {
+  const el = document.createElement('div');
+  if (r.kind === 'header') {
+    el.className = 'row header'; el.setAttribute('role', 'presentation');
+    el.append(r.label + (r.count !== '' && r.count != null ? ' · ' + r.count : ''));
+    if (r.busy) { const b = document.createElement('span'); b.className = 'busy'; b.innerHTML = '<i></i><i></i><i></i>'; b.title = '搜索中'; el.append(b); }
+    return el;
+  }
+  const e = r.e;
+  el.className = 'row item'; el.id = 'opt-' + i; el.dataset.i = i; el.setAttribute('role', 'option');
+  const ico = document.createElement('span'); ico.className = 'ico'; ico.innerHTML = ICONS[e.kind]; // 静态可信 SVG
+  const label = document.createElement('span'); label.className = 'label';
+  const title = document.createElement('span'); title.className = 'title';
+  if (e.kind === 'file') { const sl = e.title.lastIndexOf('/') + 1; highlight(title, e.title, r.pos, sl); }
+  else highlight(title, e.title, r.pos, 0);
+  label.append(title);
+  if (e.kind === 'cmd' || e.kind === 'remote') { const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = e.kind === 'cmd' ? e.cat : e.sub; label.append(sub); }
+  el.append(ico, label);
+  if (e.kind === 'cmd' && e.keys) { const k = document.createElement('kbd'); k.textContent = fmtKeys(e.keys); el.append(k); }
+  else if (e.kind !== 'cmd') { const t = document.createElement('span'); t.className = 'tag'; t.textContent = e.kind === 'file' ? '文件' : '在线'; el.append(t); }
+  return el;
+}
+// 用 textContent / <mark> 构造高亮，不经过 innerHTML，天然防 XSS。splitAt>0 时把路径拆成 dir / name
+function highlight(parent, text, positions, splitAt) {
+  const dirEl = splitAt > 0 ? document.createElement('span') : null, nameEl = splitAt > 0 ? document.createElement('span') : null;
+  if (dirEl) { dirEl.className = 'dir'; nameEl.className = 'name'; parent.append(dirEl, nameEl); }
+  const put = (a, b, m) => {
+    if (b <= a) return;
+    if (dirEl && a < splitAt && b > splitAt) { put(a, splitAt, m); put(splitAt, b, m); return; }
+    const host = dirEl ? (a >= splitAt ? nameEl : dirEl) : parent, s = text.slice(a, b);
+    if (m) { const mk = document.createElement('mark'); mk.textContent = s; host.append(mk); } else host.append(s);
+  };
+  let cur = 0;
+  for (const [s, e] of positionsToRanges(positions)) { put(cur, s, false); put(s, e, true); cur = e; }
+  put(cur, text.length, false);
+}
+
+/* ---- 查询解析可视化 / 历史 chips ---- */
+function updateChips() {
+  chipsEl.replaceChildren();
+  const label = (t) => { const s = document.createElement('span'); s.className = 'chips-label'; s.textContent = t; chipsEl.append(s); };
+  if (!state.query.trim()) {
+    const list = history.length ? history.slice(0, 6) : EXAMPLES;
+    label(history.length ? '历史' : '试试');
+    for (const q of list) { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = q; b.dataset.q = q; b.tabIndex = -1; chipsEl.append(b); }
+    return;
+  }
+  label('解析');
+  const groups = state.parsed.groups;
+  if (!groups.length) { const s = document.createElement('span'); s.textContent = '（还没有有效关键词）'; chipsEl.append(s); return; }
+  const op = (t) => { const s = document.createElement('span'); s.className = 'chip-op'; s.textContent = t; chipsEl.append(s); };
+  groups.forEach((g, gi) => {
+    if (gi) op('AND');
+    g.alts.forEach((a, ai) => {
+      if (ai) op('OR');
+      const c = document.createElement('span'); c.className = 'chip ' + a.type;
+      c.textContent = (a.type === 'exact' ? "'" : a.type === 'prefix' ? '^' : a.type === 'not' ? 'NOT ' : '') + a.raw;
+      chipsEl.append(c);
+    });
+  });
+}
+
+/* ---- 选择 / 导航 ---- */
+function itemIndexes() { const out = []; state.rows.forEach((r, i) => { if (r.kind === 'item') out.push(i); }); return out; }
+function setActive(i) {
+  state.active = i; state.activeKey = state.rows[i].key; state.userMoved = true;
+  ensureVisible(i); renderList(); input.setAttribute('aria-activedescendant', 'opt-' + i);
+}
+function move(delta) {
+  const idx = itemIndexes(); if (!idx.length) return;
+  let p = idx.indexOf(state.active); p = p < 0 ? 0 : p + delta;
+  p = delta > 0 && p >= idx.length ? (Math.abs(delta) === 1 ? 0 : idx.length - 1) : p;
+  p = delta < 0 && p < 0 ? (Math.abs(delta) === 1 ? idx.length - 1 : 0) : p;
+  setActive(idx[Math.max(0, Math.min(idx.length - 1, p))]);
+}
+function ensureVisible(i) {
+  let top = state.tops[i]; const bottom = state.tops[i + 1], vh = listEl.clientHeight;
+  if (i > 0 && state.rows[i - 1].kind === 'header' && listEl.scrollTop > state.tops[i - 1]) top = state.tops[i - 1]; // 带上分组标题
+  if (top < listEl.scrollTop) listEl.scrollTop = top;
+  else if (bottom > listEl.scrollTop + vh) listEl.scrollTop = bottom - vh + 4;
+}
+function cycleHistory(dir) {
+  if (!history.length) return;
+  histIdx = Math.max(-1, Math.min(history.length - 1, histIdx + dir));
+  input.value = histIdx < 0 ? '' : history[histIdx]; onQuery();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+/* ---- 执行 ---- */
+function execute(e, via) {
+  const q = state.query.trim(), fromPalette = via === '面板';
+  if (state.open) closePalette();
+  if (fromPalette && q) pushHistory(q);
+  recordRecent(e);
+  if (e.kind === 'cmd') {
+    addLog(e.title, via);
+    try { const r = e.run(); if (r && r.catch) r.catch(err => toast('执行失败：' + err.message)); } catch (err) { toast('执行失败：' + err.message); }
+  } else if (e.kind === 'file') { addLog('打开文件 ' + e.id, via); toast('打开文件：' + e.id); }
+  else { addLog('打开文档《' + e.title + '》', via); toast('打开文档：' + e.title); }
+}
+
+/* ---- 事件 ---- */
+input.addEventListener('input', () => { histIdx = -1; onQuery(); });
+input.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229) return; // 中文输入法组合期间，方向键 / 回车属于输入法
+  if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); cycleHistory(-1); }
+  else if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); cycleHistory(1); }
+  else if (e.key === 'ArrowDown' || (e.ctrlKey && (e.key === 'n' || e.key === 'j'))) { e.preventDefault(); move(1); }
+  else if (e.key === 'ArrowUp' || (e.ctrlKey && (e.key === 'p'))) { e.preventDefault(); move(-1); }
+  else if (e.key === 'PageDown') { e.preventDefault(); move(8); }
+  else if (e.key === 'PageUp') { e.preventDefault(); move(-8); }
+  else if (e.key === 'Enter') { e.preventDefault(); const r = state.rows[state.active]; if (r && r.kind === 'item') execute(r.e, '面板'); }
+  else if (e.key === 'Tab') e.preventDefault();
+});
+overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closePalette(); else if (e.target !== input) e.preventDefault(); }); // 保持输入框焦点
+listEl.addEventListener('scroll', () => requestAnimationFrame(renderList), { passive: true });
+listEl.addEventListener('mousemove', (e) => {
+  const el = e.target.closest('.row.item'); if (!el) return;
+  const i = +el.dataset.i; if (i !== state.active) { state.active = i; state.activeKey = state.rows[i].key; state.userMoved = true; renderList(); input.setAttribute('aria-activedescendant', 'opt-' + i); }
+});
+listEl.addEventListener('click', (e) => { const el = e.target.closest('.row.item'); if (el) execute(state.rows[+el.dataset.i].e, '面板'); });
+chipsEl.addEventListener('click', (e) => { const b = e.target.closest('button[data-q]'); if (b) { input.value = b.dataset.q; histIdx = -1; onQuery(); input.focus(); } });
+window.addEventListener('resize', () => { if (state.open) rebuild(); });
+
+document.addEventListener('keydown', (e) => {
+  if ((isMac ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === 'KeyK') { e.preventDefault(); state.open ? closePalette() : openPalette(''); return; }
+  if (e.key === 'Escape' && state.open) { e.preventDefault(); closePalette(); return; }
+  for (const { cmd, k } of SHORTCUTS) {
+    if (e.code === k.code && e.altKey === k.alt && e.shiftKey === k.shift && e.ctrlKey === k.ctrl && e.metaKey === k.meta) { e.preventDefault(); execute(cmd, '快捷键'); return; }
+  }
+});
+$('#openBtn').addEventListener('click', () => openPalette(''));
+document.querySelectorAll('.try').forEach(b => b.addEventListener('click', () => openPalette(b.dataset.q)));
+
+applyPrefs(); renderLog();
+window.__palette = { state, openPalette, closePalette }; // 便于调试 / 自动化测试
+})();
+</script>
+</body>
+</html>
